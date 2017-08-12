@@ -27,13 +27,23 @@ from os.path import join as joinpath
 import gkf_helpers as gkf
 
 class FileSpec:
-    def __init__(f:str, info:os.stat_result):
-        self.size = info.st_size
+    def __init__(f:str, info:os.stat_result, score:float=0.0) -> None:
+        self.info = info
         self.bare_name = os.path.basename(f)
+        self.set_test = hashlib.sha1(
+            self.bare_name + str(self.info.st_size)
+            ).hexdigest()
         pass
 
+    def __str__(self) -> str:
+        """
+        The hex digest is used for this function.
+        """
+        return str(self.set_test)
 
-def show_args(pargs:Namespace) -> None:
+
+
+def show_args(pargs:object) -> None:
     """
     Print out the program arguments as they would have been typed
     in. Command line arguments have a -- in the front, and embedded
@@ -45,10 +55,9 @@ def show_args(pargs:Namespace) -> None:
     for _ in sorted(vars(pargs).items()):
         opt_string += " --"+ _[0].replace("_","-") + " " + str(_[1])
     print(opt_string + "\n")    
-    pass
 
 
-def compute_scores(pargs:Namespace,
+def compute_scores(pargs:object,
         registry:Dict[str, os.stat_result]
         ) -> Dict[str, FileSpec]:
     """
@@ -61,30 +70,12 @@ def compute_scores(pargs:Namespace,
     returns -- a dict with the same keys and some additional 
         information recorded.
     """
-    pass
+    young = pargs.young_file * 24 * 60 * 60
+    gkf.tombstone('Computing scores.')
+    for k in sorted(registry.keys()):
+        registry[k] = FileSpec(k, v)
 
-
-
-def scan_sources(pargs:Namespace) -> Dict[str, os.stat_result]:
-    """
-    Perform the scan using the rules and places provided by the user.
-
-    pargs -- The Namespace created by parsing command line options,
-        but it could be any Namespace.
-
-    returns -- a dict of filenames and stats.
-    """
-    folders = gkf.listify(pargs.home).extend(pargs.dir)
-    oed = {}
-    for folder in [ 
-            os.path.expanduser(os.path.expandvars(_)) 
-            for _ in folders if _ 
-            ]:
-        if not pargs.quiet: gkf.tombstone(folder)
-        oed =   { **oed, **scan_source(folder, 
-                    pargs.small_file, pargs.follow, pargs.quiet) }
-
-    return oed
+    return registry
 
 
 def scan_source(src:str,
@@ -103,6 +94,28 @@ def scan_source(src:str,
             if data.st_size < bigger_than: continue
             oed[k] = data
         
+    return oed
+
+
+def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
+    """
+    Perform the scan using the rules and places provided by the user.
+
+    pargs -- The Namespace created by parsing command line options,
+        but it could be any Namespace.
+
+    returns -- a dict of filenames and stats.
+    """
+    folders = gkf.listify(pargs.home).extend(pargs.dir)
+    oed = {}
+    for folder in [ 
+            os.path.expanduser(os.path.expandvars(_)) 
+            for _ in folders if _ 
+            ]:
+        if not pargs.quiet: gkf.tombstone(folder)
+        oed =   { **oed, **scan_source(folder, 
+                    pargs.small_file, pargs.follow, pargs.quiet) }
+
     return oed
 
 
