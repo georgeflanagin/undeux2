@@ -17,67 +17,93 @@ from   typing import *
 
 import argparse
 import cmd
-from   md5 import md5
+import hashlib
 import os
 import sys
 
 from os import walk, remove, stat
 from os.path import join as joinpath
  
-import fname
+import gkf_helpers as gkf
 
 class FileSpec:
-    pass
-
-class FileSpec:
-    """
-    These objects are the items of interest associated 
-    with a disc file.
-    """
-    def __init__(self, filename:str):
-        self.f = fname.Fname(filename)
-        self.srep = self.f.fname + str(len(self.f))
+    def __init__(f:str, info:os.stat_result):
+        self.size = info.st_size
+        self.bare_name = os.path.basename(f)
         pass
 
-    def __str__(self) -> str:
-        """
-        
-        """
-        return self.srep
-        
 
-
-    def __eq__(self, other:FileSpec) -> bool:
-        """
-        compare the srep members, not the files themselves.
-        """
-        if not isinstance(other, FileSpec): return not Implemented
-        return str(self) == str(other)
-
-
-def build_dictionary(start_here:str) -> dict:
+def show_args(pargs:Namespace) -> None:
     """
-    Build a dict-like object that contains the filenames and fingerprints.
+    Print out the program arguments as they would have been typed
+    in. Command line arguments have a -- in the front, and embedded
+    dashes in the option itself. These are removed and changed to
+    an underscore, respectively.
     """
+    print("")
+    opt_string = ""
+    for _ in sorted(vars(pargs).items()):
+        opt_string += " --"+ _[0].replace("_","-") + " " + str(_[1])
+    print(opt_string + "\n")    
+    pass
+
+
+def compute_scores(pargs:Namespace,
+        registry:Dict[str, os.stat_result]
+        ) -> Dict[str, FileSpec]:
+    """
+    This function is the unique operation of the dedup program.
+
+    pargs -- the options.
+
+    registry -- a dict of filenames and their statistics.
+
+    returns -- a dict with the same keys and some additional 
+        information recorded.
+    """
+    pass
+
+
+
+def scan_sources(pargs:Namespace) -> Dict[str, os.stat_result]:
+    """
+    Perform the scan using the rules and places provided by the user.
+
+    pargs -- The Namespace created by parsing command line options,
+        but it could be any Namespace.
+
+    returns -- a dict of filenames and stats.
+    """
+    folders = gkf.listify(pargs.home).extend(pargs.dir)
     oed = {}
-    # Build up dict with key as filesize and value is list of filenames.
-    for path, dirs, files in walk(start_here ):
-        for filename in files:
-            filepath = joinpath(path, filename)
-            filesize = stat( filepath ).st_size
-            filesizes.setdefault( filesize, [] ).append( filepath )
-    unique = set()
-    duplicates = []
-    # We are only interested in lists with more than one entry.
-    for files in [ flist for flist in filesizes.values() if len(flist)>1 ]:
-        for filepath in files:
-            with open( filepath ) as openfile:
-                filehash = md5( openfile.read() ).hexdigest()
-            if filehash not in unique:
-                unique.add( filehash )
-            else:
-                duplicates.append( filepath )
-    return duplicates
+    for folder in [ 
+            os.path.expanduser(os.path.expandvars(_)) 
+            for _ in folders if _ 
+            ]:
+        if not pargs.quiet: gkf.tombstone(folder)
+        oed =   { **oed, **scan_source(folder, 
+                    pargs.small_file, pargs.follow, pargs.quiet) }
+
+    return oed
+
+
+def scan_source(src:str,
+                bigger_than:int,
+                follow_links:bool=False, 
+                quiet:bool=False) -> Dict[str, os.stat_result]:
+    """
+    Build the list of files and their relevant data from os.stat.
+    """
+    stat_function = os.stat if follow_links else os.lstat
+    oed = {}
+    for root_dir, folders, files in os.walk(folder, followlinks=False):
+        for f in files:
+            k = os.path.join(root_dir, f)
+            data = stat_function(k)
+            if data.st_size < bigger_than: continue
+            oed[k] = data
+        
+    return oed
 
 
 def dedup_help() -> int:
@@ -133,6 +159,23 @@ def dedup_help() -> int:
         Where you want to start looking, and go down from there. This
         defaults to the user's home directory. 
 
+        [ NOTE: For both --dir and --home, the directory names may
+        contain environment variables. They will be correctly
+        expanded. -- end note. ]
+
+    --follow 
+        If present, symbolic links will be dereferenced for purposes
+        of consideration of duplicates. Use of this switch requires
+        careful consideration, and it is probably only useful in 
+        cases where you think you have files in your directory of
+        interest that are duplicates of things elsewhere that are
+        mentioned by symbolic links that are *also* in your 
+        directory of interest.
+
+    --ignore-extensions
+        This option is useful with media files where there may be
+        .jpg and .JPG and .jpeg files all mixed together.
+
     --ignore-filenames
         This option is useful when searching several mount points or
         directories that may have been created by different people
@@ -182,35 +225,32 @@ def dedup_main() -> int:
     This function loads the arguments, creates the console,
     and runs the program. IOW, this is it.
     """
-    parser = argparse.ArgumentParser(
-        description='Find probable duplicate files, and create links to them.'
-        )
-    parser.add_argument('-?', '--help', action='store_true')
-    parser.add_argument('--quiet', action='store_true')
-    parser.add_argument('--output', type=str, default='~/dedups')
-    parser.add_argument('--version', action='store_true')
-    parser.add_argument('--young-file', type=int, default=365)
-    parser.add_argument('--small-file', type=int, default=4096)
-    parser.add_argument('--nice', type=int, default=20)
-    parser.add_argument('--ignore-filenames', action='store_true')
+    parser = argparse.ArgumentParser(description='Find probable duplicate files.')
+
+    parser.add_argument('-?', '--explain', type=bool, action='store_true')
     parser.add_argument('--dir', type=str, action='append', default=None)
+    parser.add_argument('--follow', type=bool, action='store_true')
     parser.add_argument('--home', type=str, default='~')
+    parser.add_argument('--ignore-extensions', action='store_true')
+    parser.add_argument('--ignore-filenames', action='store_true')
+    parser.add_argument('--quiet', type=bool, action='store_true')
+    parser.add_argument('--nice', type=int, default=20)
+    parser.add_argument('--output', type=str, default='~/dedups')
+    parser.add_argument('--small-file', type=int, default=4096)
+    parser.add_argument('--version', type=bool, action='store_true')
+    parser.add_argument('--young-file', type=int, default=365)
 
     pargs = parser.parse_args()
-    if pargs.help: return dedup_help()
+    if pargs.help or pargs.explain: return dedup_help()
+
+    show_args(pargs)
+
+    file_registry = compute_scores(pargs, scan_sources(pargs))
 
     return os.EX_OK
 
  
 if __name__ == '__main__':
     sys.exit(dedup_main())
-else
+else:
     pass
-    print '%d Duplicate files found.' % len(DUPS)
-    for f in sorted(DUPS):
-        if ARGS.remove == True:
-            remove( f )
-            print '\tDeleted '+ f
-        else:
-            print '\t'+ f
-
