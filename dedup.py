@@ -18,6 +18,10 @@ from   typing import *
 
 import argparse
 import cmd
+import csv
+import datetime
+from   datetime import date
+from   datetime import time
 import hashlib
 import os
 import sys
@@ -156,12 +160,15 @@ def dedup_help() -> int:
     Files with the same name as a newer file, and that have at least
         one common ancestor directory are penalized even more.
     Files are penalized if their contents exactly match another
-        file.
+        file. This is the final step. There is no need to read every
+        file because if two files have different lengths, they 
+        are obviously not the same file.
     
     So if you have an ancient file, that is a duplicate of some other
-    file with the same name somewhere on the same mount point, and it 
+    file, with the same name, somewhere on the same mount point, and it 
     is large and hasn't been accessed in a while, then its score
-    may approach 1.0
+    may approach 1.0. This program will then produce a list of the worst
+    offenders.
 
     Through the options below, you will have a lot of control over
     how dedup works. You should read through all of them before you
@@ -271,6 +278,12 @@ def dedup_main() -> int:
     show_args(pargs)
 
     file_registry = compute_scores(pargs, scan_sources(pargs))
+    out = ( os.path.expanduser(pargs.output) + os.sep + 
+            'dedup.' + gkf.now_as_string('-') + '.csv')
+    with open(out, 'w+') as f:
+        csvfile = csv.writer(f)
+        for _ in file_registry:
+            csvfile.writerow(str(_))
 
     return os.EX_OK
 
