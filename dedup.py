@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 #pragma pylint=off
     
 # Credits
@@ -27,12 +28,10 @@ from os.path import join as joinpath
 import gkf_helpers as gkf
 
 class FileSpec:
-    def __init__(f:str, info:os.stat_result, score:float=0.0) -> None:
+    def __init__(self, f:str, info:os.stat_result, score:float=0.0) -> None:
         self.info = info
         self.bare_name = os.path.basename(f)
-        self.set_test = hashlib.sha1(
-            self.bare_name + str(self.info.st_size)
-            ).hexdigest()
+        self.set_test = self.bare_name + str(self.info.st_size)
         pass
 
     def __str__(self) -> str:
@@ -73,8 +72,9 @@ def compute_scores(pargs:object,
     young = pargs.young_file * 24 * 60 * 60
     gkf.tombstone('Computing scores.')
     for k in sorted(registry.keys()):
-        registry[k] = FileSpec(k, v)
+        registry[k] = FileSpec(k, registry[k])
 
+    gkf.tombstone('Scored ' + str(len(registry)) + ' files.')
     return registry
 
 
@@ -84,14 +84,25 @@ def scan_source(src:str,
                 quiet:bool=False) -> Dict[str, os.stat_result]:
     """
     Build the list of files and their relevant data from os.stat.
+
+    Note that we skip files that we cannot write to (i.e., delete),
+    the small files, and anything we cannot stat.
     """
+    my_name, my_uid = gkf.me()
     stat_function = os.stat if follow_links else os.lstat
     oed = {}
-    for root_dir, folders, files in os.walk(folder, followlinks=False):
+    for root_dir, folders, files in os.walk(src, followlinks=follow_links):
         for f in files:
             k = os.path.join(root_dir, f)
-            data = stat_function(k)
-            if data.st_size < bigger_than: continue
+            try:
+                data = stat_function(k)
+            except PermissionError as e:                # cannot stat it.
+                continue
+            if data.st_uid * data.st_gid == 0: continue # belongs to root.
+            if data.st_size < bigger_than: continue     # small file.
+            if data.st_uid != my_uid:                   # Is it even my file?
+                chmod_bits = data.st_mode & stat.S_IMODE
+                if chmod_bits & 0o20 != 0o20: continue  # cannot remove it.
             oed[k] = data
         
     return oed
@@ -106,7 +117,8 @@ def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
 
     returns -- a dict of filenames and stats.
     """
-    folders = gkf.listify(pargs.home).extend(pargs.dir)
+    folders = gkf.listify(pargs.home)
+    folders.extend(gkf.listify(pargs.dir))
     oed = {}
     for folder in [ 
             os.path.expanduser(os.path.expandvars(_)) 
@@ -240,21 +252,21 @@ def dedup_main() -> int:
     """
     parser = argparse.ArgumentParser(description='Find probable duplicate files.')
 
-    parser.add_argument('-?', '--explain', type=bool, action='store_true')
+    parser.add_argument('-?', '--explain', action='store_true')
     parser.add_argument('--dir', type=str, action='append', default=None)
-    parser.add_argument('--follow', type=bool, action='store_true')
+    parser.add_argument('--follow', action='store_true')
     parser.add_argument('--home', type=str, default='~')
     parser.add_argument('--ignore-extensions', action='store_true')
     parser.add_argument('--ignore-filenames', action='store_true')
-    parser.add_argument('--quiet', type=bool, action='store_true')
+    parser.add_argument('--quiet', action='store_true')
     parser.add_argument('--nice', type=int, default=20)
     parser.add_argument('--output', type=str, default='~/dedups')
     parser.add_argument('--small-file', type=int, default=4096)
-    parser.add_argument('--version', type=bool, action='store_true')
+    parser.add_argument('--version', action='store_true')
     parser.add_argument('--young-file', type=int, default=365)
 
     pargs = parser.parse_args()
-    if pargs.help or pargs.explain: return dedup_help()
+    if pargs.explain: return dedup_help()
 
     show_args(pargs)
 
