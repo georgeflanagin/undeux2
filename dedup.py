@@ -30,20 +30,29 @@ from os import walk, remove, stat
 from os.path import join as joinpath
  
 import gkf_helpers as gkf
+import fname
 
 class FileSpec:
+    """
+    FileSpec is a wrapper around the info from os.stat
+    """
     def __init__(self, f:str, info:os.stat_result, score:float=0.0) -> None:
         self.info = info
-        self.bare_name = os.path.basename(f)
-        self.set_test = self.bare_name + str(self.info.st_size)
-        pass
+        self.f = fname.Fname(f)
+        self.hash = hashlib.md5(self.f()).hexdigest()
+        self.score = score
+
 
     def __str__(self) -> str:
         """
         The hex digest is used for this function.
         """
-        return str(self.set_test)
+        return str(self.hash)
 
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, FileSpec): return NotImplemented
+        return self.hash == other.hash
 
 
 def show_args(pargs:object) -> None:
@@ -107,7 +116,7 @@ def scan_source(src:str,
             if data.st_uid != my_uid:                   # Is it even my file?
                 chmod_bits = data.st_mode & stat.S_IMODE
                 if chmod_bits & 0o20 != 0o20: continue  # cannot remove it.
-            oed[k] = data
+            oed[k] = FileSpec(k, data)
         
     return oed
 
@@ -280,6 +289,8 @@ def dedup_main() -> int:
     file_registry = compute_scores(pargs, scan_sources(pargs))
     out = ( os.path.expanduser(pargs.output) + os.sep + 
             'dedup.' + gkf.now_as_string('-') + '.csv')
+
+
     with open(out, 'w+') as f:
         csvfile = csv.writer(f)
         for _ in file_registry:
