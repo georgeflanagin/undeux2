@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 #pragma pylint=off
@@ -29,30 +29,8 @@ import sys
 from os import walk, remove, stat
 from os.path import join as joinpath
  
-import gkf_helpers as gkf
+import gkflib as gkf
 import fname
-
-class FileSpec:
-    """
-    FileSpec is a wrapper around the info from os.stat
-    """
-    def __init__(self, f:str, info:os.stat_result, score:float=0.0) -> None:
-        self.info = info
-        self.f = fname.Fname(f)
-        self.hash = hashlib.md5(self.f()).hexdigest()
-        self.score = score
-
-
-    def __str__(self) -> str:
-        """
-        The hex digest is used for this function.
-        """
-        return str(self.hash)
-
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, FileSpec): return NotImplemented
-        return self.hash == other.hash
 
 
 def show_args(pargs:object) -> None:
@@ -67,28 +45,6 @@ def show_args(pargs:object) -> None:
     for _ in sorted(vars(pargs).items()):
         opt_string += " --"+ _[0].replace("_","-") + " " + str(_[1])
     print(opt_string + "\n")    
-
-
-def compute_scores(pargs:object,
-        registry:Dict[str, os.stat_result]
-        ) -> Dict[str, FileSpec]:
-    """
-    This function is the unique operation of the dedup program.
-
-    pargs -- the options.
-
-    registry -- a dict of filenames and their statistics.
-
-    returns -- a dict with the same keys and some additional 
-        information recorded.
-    """
-    young = pargs.young_file * 24 * 60 * 60
-    gkf.tombstone('Computing scores.')
-    for k in sorted(registry.keys()):
-        registry[k] = FileSpec(k, registry[k])
-
-    gkf.tombstone('Scored ' + str(len(registry)) + ' files.')
-    return registry
 
 
 def scan_source(src:str,
@@ -116,7 +72,7 @@ def scan_source(src:str,
             if data.st_uid != my_uid:                   # Is it even my file?
                 chmod_bits = data.st_mode & stat.S_IMODE
                 if chmod_bits & 0o20 != 0o20: continue  # cannot remove it.
-            oed[k] = FileSpec(k, data)
+            oed[k] = fname.Fname(k).hash
         
     return oed
 
@@ -286,15 +242,15 @@ def dedup_main() -> int:
 
     show_args(pargs)
 
-    file_registry = compute_scores(pargs, scan_sources(pargs))
+    d = scan_sources(pargs)
     out = ( os.path.expanduser(pargs.output) + os.sep + 
             'dedup.' + gkf.now_as_string('-') + '.csv')
 
 
     with open(out, 'w+') as f:
         csvfile = csv.writer(f)
-        for _ in file_registry:
-            csvfile.writerow(str(_))
+        for x, y in d.items():
+            csvfile.writerow([x,y])
 
     return os.EX_OK
 
