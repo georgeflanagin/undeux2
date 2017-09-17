@@ -160,13 +160,13 @@ def scan_source(src:str,
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
             stats.append(score(stats))
+            if not quiet: gkf.tombstone(k)
             oed[k] = stats
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
     num_files = str(len(oed))
-    if not quiet:
-        gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
+    gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
         
     return oed
 
@@ -180,8 +180,7 @@ def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
 
     returns -- a dict of filenames and stats.
     """
-    folders = gkf.listify(pargs.home)
-    folders.extend(gkf.listify(pargs.dir))
+    folders = gkf.listify(pargs.dir)
     oed = {}
     for folder in [ 
             os.path.expanduser(os.path.expandvars(_)) 
@@ -202,7 +201,7 @@ def score(stats:tuple) -> dict:
     this is trivial, but I put it in a separate function in
     case it gets large.
     """
-    return round(math.log(stats[1]) * sum(stats[2:]))
+    return round(math.log(stats[1]) + math.log(sum(stats[2:])), 3)
 
 
 def dedup_help() -> int:
@@ -346,6 +345,7 @@ def dedup_main() -> int:
     if pargs.explain: return dedup_help()
 
     show_args(pargs)
+    os.nice(pargs.nice)
 
     return report(flip_dict(scan_sources(pargs)), pargs)
 
