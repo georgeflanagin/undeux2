@@ -20,9 +20,6 @@ import argparse
 import cmd
 import collections
 import csv
-import datetime
-from   datetime import date
-from   datetime import time
 import hashlib
 import math
 import os
