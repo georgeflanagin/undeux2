@@ -24,6 +24,7 @@ import datetime
 from   datetime import date
 from   datetime import time
 import hashlib
+import math
 import os
 import sys
 import time
@@ -72,6 +73,7 @@ def report(d:dict, pargs:object) -> int:
     """
     report the worst offenders.
     """
+    gkf.tombstone('reporting.')
     duplicates = []
     for k, vect in d.items():
         if len(vect) == 1: continue
@@ -82,16 +84,19 @@ def report(d:dict, pargs:object) -> int:
     report_file = ( destination_dir + os.sep + 
             'dedup.' + gkf.now_as_string('-') + '.csv')
 
+    with open(report_file, 'w+') as f:
+        csvfile = csv.writer(f)
+        for row in duplicates:
+            csvfile.writerow(row)
+    gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
+
     if pargs.links: 
         link_dir = destination_dir + os.sep + 'links'
         for dup in duplicates:
             f = Fname.fname(dup[0])
             os.symlink(str(f), link_dir + os.sep + f.fname)
 
-    with open(report_file, 'w+') as f:
-        csvfile = csv.writer(f)
-        for row in duplicates:
-            csvfile.writerow(row)
+        gkf.tombstone('links created.')
 
     return os.EX_OK
 
@@ -132,6 +137,7 @@ def scan_source(src:str,
 
     start_time = time.time()
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
+        if '/.' in root_dir: continue
         for f in files:
             k = os.path.join(root_dir, f)
             try:
@@ -196,7 +202,7 @@ def score(stats:tuple) -> dict:
     this is trivial, but I put it in a separate function in
     case it gets large.
     """
-    return round(math.log(stat[1]) * sum(stats[2:]))
+    return round(math.log(stats[1]) * sum(stats[2:]))
 
 
 def dedup_help() -> int:
@@ -328,9 +334,10 @@ def dedup_main() -> int:
     parser.add_argument('--home', type=str, default='~')
     parser.add_argument('--ignore-extensions', action='store_true')
     parser.add_argument('--ignore-filenames', action='store_true')
-    parser.add_argument('--quiet', action='store_true')
+    parser.add_argument('--links', action='store_true')
     parser.add_argument('--nice', type=int, default=20)
     parser.add_argument('--output', type=str, default='.')
+    parser.add_argument('--quiet', action='store_true')
     parser.add_argument('--small-file', type=int, default=4096)
     parser.add_argument('--version', action='store_true')
     parser.add_argument('--young-file', type=int, default=365)
