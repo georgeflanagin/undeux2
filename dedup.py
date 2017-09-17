@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 #pragma pylint=off
@@ -18,6 +18,7 @@ from   typing import *
 
 import argparse
 import cmd
+import collections
 import csv
 import datetime
 from   datetime import date
@@ -25,12 +26,74 @@ from   datetime import time
 import hashlib
 import os
 import sys
+import time
 
 from os import walk, remove, stat
 from os.path import join as joinpath
  
 import gkflib as gkf
 import fname
+
+
+def flip_dict(oed:dict, quiet:bool=False) -> dict:
+    """
+    oed -- a dict with the filename as a key, and a list (digest + 
+        os.stat data + score) as a value.
+    
+    returns -- a dict with the digest as a key, and a list of matching 
+        (filename + os.stat data + score) as the value. 
+    """
+    start_time = time.time() 
+    gkf.tombstone('analysis begun.')
+    filecount = str(len(oed))
+
+    unique_files = collections.defaultdict(list)
+
+    while True:
+        try:
+            name, stat_data = oed.popitem()
+            new_tuple = (name, 
+                stat_data[1], stat_data[2], stat_data[3], stat_data[4], 
+                stat_data[5])
+            new_key = stat_data[0]
+            unique_files[new_key].append(new_tuple)
+
+        except KeyError as e:
+            break
+
+    stop_time = time.time()
+    elapsed_time = str(round(stop_time - start_time, 3))
+    gkf.tombstone(" :: ".join(['analysis completed', elapsed_time, filecount]))        
+
+    return unique_files
+
+
+def report(d:dict, pargs:object) -> int:
+    """
+    report the worst offenders.
+    """
+    duplicates = []
+    for k, vect in d.items():
+        if len(vect) == 1: continue
+        for e in vect:
+            duplicates.append([e[0], e[1], e[-1], k])
+        
+    destination_dir = os.path.expanduser(pargs.output)
+    report_file = ( destination_dir + os.sep + 
+            'dedup.' + gkf.now_as_string('-') + '.csv')
+
+    if pargs.links: 
+        link_dir = destination_dir + os.sep + 'links'
+        for dup in duplicates:
+            f = Fname.fname(dup[0])
+            os.symlink(str(f), link_dir + os.sep + f.fname)
+
+    with open(report_file, 'w+') as f:
+        csvfile = csv.writer(f)
+        for row in duplicates:
+            csvfile.writerow(row)
+
+    return os.EX_OK
 
 
 def show_args(pargs:object) -> None:
@@ -50,16 +113,24 @@ def show_args(pargs:object) -> None:
 def scan_source(src:str,
                 bigger_than:int,
                 follow_links:bool=False, 
-                quiet:bool=False) -> Dict[str, os.stat_result]:
+                quiet:bool=False) -> Dict[str, list]:
     """
     Build the list of files and their relevant data from os.stat.
-
     Note that we skip files that we cannot write to (i.e., delete),
     the small files, and anything we cannot stat.
+
+    src -- name of a directory to scan
+    follow_links -- if true, we don't treat links as links. Instead
+        we scan the item pointed to by the link.
+    
+    returns -- a dict, keyed on the absolute path name, and with 
+        a list of info about the file as the value.
     """
     my_name, my_uid = gkf.me()
     stat_function = os.stat if follow_links else os.lstat
     oed = {}
+
+    start_time = time.time()
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
         for f in files:
             k = os.path.join(root_dir, f)
@@ -67,12 +138,29 @@ def scan_source(src:str,
                 data = stat_function(k)
             except PermissionError as e:                # cannot stat it.
                 continue
+
             if data.st_uid * data.st_gid == 0: continue # belongs to root.
-            if data.st_size < bigger_than: continue     # small file.
+            if data.st_size < bigger_than: continue     # small file; why worry?
             if data.st_uid != my_uid:                   # Is it even my file?
                 chmod_bits = data.st_mode & stat.S_IMODE
                 if chmod_bits & 0o20 != 0o20: continue  # cannot remove it.
-            oed[k] = fname.Fname(k).hash
+
+            F = fname.Fname(k)
+            
+            # Note that this operation changes the times to "seconds ago"
+            # from the start time of the scanning. 
+            stats = [ F.hash, data.st_size, 
+                start_time - data.st_mtime, 
+                start_time - data.st_atime, 
+                start_time - data.st_ctime ]
+            stats.append(score(stats))
+            oed[k] = stats
+
+    stop_time = time.time()
+    elapsed_time = str(round(stop_time-start_time, 3))
+    num_files = str(len(oed))
+    if not quiet:
+        gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
         
     return oed
 
@@ -94,10 +182,21 @@ def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
             for _ in folders if _ 
             ]:
         if not pargs.quiet: gkf.tombstone(folder)
-        oed =   { **oed, **scan_source(folder, 
-                    pargs.small_file, pargs.follow, pargs.quiet) }
+        oed =   { **oed, **scan_source(
+                    folder, pargs.small_file, pargs.follow, pargs.quiet
+                    ) }
 
     return oed
+
+
+def score(stats:tuple) -> dict:
+    """
+    Create a score based on the stats which is arranged as
+    hash (ignored), size, mtime, atime, ctime. At the moment,
+    this is trivial, but I put it in a separate function in
+    case it gets large.
+    """
+    return round(math.log(stat[1]) * sum(stats[2:]))
 
 
 def dedup_help() -> int:
@@ -178,6 +277,12 @@ def dedup_help() -> int:
         directories that may have been created by different people
         at different times. By default, --ignore-filenames is *OFF*
 
+    --links
+        If this switch is present, the directory that is associated
+        with --output will contain a directory named 'links' that
+        will have symbolic links to all the duplicate files. This 
+        feature is for convenience in their removal.
+
     --nice {int} 
         Keep in mind a terabyte of disc could hold one million files 
         at one megabyte each. You should be nice, and frankly, the program
@@ -205,13 +310,6 @@ def dedup_help() -> int:
         in the directory system, but many projects depend on tiny and
         duplicate small .conf files being present. The default value is
         4096.
-
-    --young-file {int} 
-        Files that have been read/opened more recently than this number
-        of days are not given an age penalty when their suitability for
-        removal is calculated. It is as though your system was 
-        born this many days ago. The default value is 365.
-
     """
     print(dedup_help.__doc__)
     return os.EX_OK
@@ -232,7 +330,7 @@ def dedup_main() -> int:
     parser.add_argument('--ignore-filenames', action='store_true')
     parser.add_argument('--quiet', action='store_true')
     parser.add_argument('--nice', type=int, default=20)
-    parser.add_argument('--output', type=str, default='~/dedups')
+    parser.add_argument('--output', type=str, default='.')
     parser.add_argument('--small-file', type=int, default=4096)
     parser.add_argument('--version', action='store_true')
     parser.add_argument('--young-file', type=int, default=365)
@@ -242,19 +340,9 @@ def dedup_main() -> int:
 
     show_args(pargs)
 
-    d = scan_sources(pargs)
-    out = ( os.path.expanduser(pargs.output) + os.sep + 
-            'dedup.' + gkf.now_as_string('-') + '.csv')
+    return report(flip_dict(scan_sources(pargs)), pargs)
 
 
-    with open(out, 'w+') as f:
-        csvfile = csv.writer(f)
-        for x, y in d.items():
-            csvfile.writerow([x,y])
-
-    return os.EX_OK
-
- 
 if __name__ == '__main__':
     sys.exit(dedup_main())
 else:
