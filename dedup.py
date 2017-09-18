@@ -20,8 +20,10 @@ import argparse
 import cmd
 import collections
 import csv
+from   functools import reduce
 import hashlib
 import math
+import operator
 import os
 import sys
 import time
@@ -89,6 +91,7 @@ def report(d:dict, pargs:object) -> int:
 
     if pargs.links: 
         link_dir = destination_dir + os.sep + 'links'
+        gkf.mkdir(link_dir)
         for dup in duplicates:
             f = Fname.fname(dup[0])
             os.symlink(str(f), link_dir + os.sep + f.fname)
@@ -135,6 +138,7 @@ def scan_source(src:str,
     start_time = time.time()
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
         if '/.' in root_dir: continue
+        gkf.tombstone('scanning ' + root_dir)
         for f in files:
             k = os.path.join(root_dir, f)
             try:
@@ -177,13 +181,13 @@ def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
 
     returns -- a dict of filenames and stats.
     """
-    folders = gkf.listify(pargs.dir)
+    folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(pargs.home)
+
     oed = {}
     for folder in [ 
             os.path.expanduser(os.path.expandvars(_)) 
             for _ in folders if _ 
             ]:
-        if not pargs.quiet: gkf.tombstone(folder)
         oed =   { **oed, **scan_source(
                     folder, pargs.small_file, pargs.follow, pargs.quiet
                     ) }
@@ -198,7 +202,8 @@ def score(stats:tuple) -> dict:
     this is trivial, but I put it in a separate function in
     case it gets large.
     """
-    return round(math.log(stats[1]) + math.log(sum(stats[2:])), 3)
+    if not reduce(operator.mul, stats[1:], 1): return 0
+    return round(math.log(stats[1]) + math.log(sum(stats[2:])), 3) 
 
 
 def dedup_help() -> int:
@@ -339,6 +344,7 @@ def dedup_main() -> int:
     parser.add_argument('--young-file', type=int, default=365)
 
     pargs = parser.parse_args()
+    gkf.mkdir(pargs.output)
     if pargs.explain: return dedup_help()
 
     show_args(pargs)
