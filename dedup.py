@@ -93,8 +93,17 @@ def report(d:dict, pargs:object) -> int:
         link_dir = destination_dir + os.sep + 'links'
         gkf.mkdir(link_dir)
         for dup in duplicates:
-            f = Fname.fname(dup[0])
-            os.symlink(str(f), link_dir + os.sep + f.fname)
+            f = fname.Fname(dup[0])
+            counter = 1
+            stub = f.fname + str(counter)
+            while True:
+                try:
+                    os.symlink(str(f), link_dir + os.sep + stub)
+                    break
+                except FileExistsError as e:
+                    counter += 1
+                    stub = f.fname + str(counter)
+                    continue
 
         gkf.tombstone('links created.')
 
@@ -202,8 +211,13 @@ def score(stats:tuple) -> dict:
     this is trivial, but I put it in a separate function in
     case it gets large.
     """
-    if not reduce(operator.mul, stats[1:], 1): return 0
-    return round(math.log(stats[1]) + math.log(sum(stats[2:])), 3) 
+    try:
+        if not reduce(operator.mul, stats[1:], 1): return 0
+        return round(math.log(stats[1]) + math.log(sum(stats[2:])), 3) 
+    except Exception as e:
+        gkf.tombstone(str(e))
+        gkf.tombstone(str(stats))
+        return 0
 
 
 def dedup_help() -> int:
