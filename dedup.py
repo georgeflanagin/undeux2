@@ -26,6 +26,7 @@ from   datetime import time
 import hashlib
 import math
 import os
+import sqlite3
 import sys
 import time
 
@@ -34,6 +35,104 @@ from os.path import join as joinpath
  
 import gkflib as gkf
 import fname
+
+schema = [
+    """CREATE TABLE filelist ( 
+    filename VARCHAR(1000) NOT NULL
+    ,content_hash CHAR(32) NOT NULL
+    ,modify_age float NOT NULL
+    ,access_age float NOT NULL
+    ,create_age float NOT NULL
+    ,score float DEFAULT 0
+    )"""
+    ]
+
+
+class DeDupDB(object):
+    def __init__(self, path_to_db:str, force_new_db:bool = False):
+        """
+        Does what it says. Opens the database if present, and
+        creates the database if it is MIA.
+        """
+        stmt = ""
+        self.db = None
+        self.cursor = None
+
+        db_file = fname.Fname(path_to_db)
+        gkf.tombstone("Database name will be " + str(db_file))
+        if force_new_db:
+            try:
+                gkf.tombstone("Attempting to remove old database.")
+                os.remove(str(db_file))
+            except OSError as e:
+                # no harm in deleting a file that does not exist.
+                gkf.tombstone("Nothing to remove")
+            else:
+                gkf.tombstone("Removed.")
+
+        if db_file:
+            gkf.tombstone("Attempting to open existing database " + str(db_file))
+            self.db = sqlite3.connect(str(db_file), timeout=30, isolation_level='DEFERRED')
+            self.cursor = self.db.cursor()
+            gkf.tombstone("Database opened: " + str(fname.Fname(db_file)))
+            return
+
+        try:
+            gkf.tombstone("Attempting to create database in " + str(db_file))
+            self.db = sqlite3.connect(str(db_file), timeout=30, isolation_level='DEFERRED')
+            gkf.tombstone("New ishtar.db created: " + str(db_file))
+
+            for stmt in schema: self.db.execute(stmt)
+
+        except sqlite3.OperationalError as e:
+            gkf.tombstone(str(e))
+            if stmt: gkf.tombstone(stmt)
+            exit(os.EX_CANTCREAT)
+
+        else:
+            self.cursor = self.db.cursor()
+            gkf.tombstone('cursor created.')
+
+        finally:
+            self._keys_on()
+            gkf.tombstone('foreign keys are on')
+
+
+    def _keys_off(self):
+        self.cursor.execute('pragma foreign_keys = 0')
+        self.cursor.execute('pragma synchronous = OFF')
+
+
+    def _keys_on(self):
+        self.cursor.execute('pragma foreign_keys = 1')
+        self.cursor.execute('pragma synchronous = FULL')
+
+
+    def add_file_details(self, fileinfo:list) -> bool:
+        """
+        Populate the filelist. Returns whether all the info was added.
+            stats = [ str(F), F.hash, data.st_size, 
+                start_time - data.st_mtime, 
+                start_time - data.st_atime, 
+                start_time - data.st_ctime ]
+            oed[k] = tuple(stats.append(score(stats)))
+        """
+
+        SQL = """insert into filelist values (?, ?, ?, ?, ?, ?, ?)"""
+        fileinfo = gkf.listify(fileinfo)
+        i = 0
+
+        if len(fileinfo) > 100: self._keys_off()
+        for t in fileinfo: 
+            try:
+                self.cursor.execute(SQL, t)   
+                i += 1
+            except:
+                pass
+        self.db.commit()    
+        if len(fileinfo) > 100: self._keys_on()
+
+        return i == len(fileinfo)
 
 
 def flip_dict(oed:dict, quiet:bool=False) -> dict:
@@ -54,7 +153,7 @@ def flip_dict(oed:dict, quiet:bool=False) -> dict:
         try:
             name, stat_data = oed.popitem()
             new_tuple = (name, 
-                stat_data[1], stat_data[2], stat_data[3], stat_data[4], 
+                stat_data[0], stat_data[1], stat_data[2], stat_data[3], stat_data[4], 
                 stat_data[5])
             new_key = stat_data[0]
             unique_files[new_key].append(new_tuple)
@@ -78,7 +177,7 @@ def report(d:dict, pargs:object) -> int:
     for k, vect in d.items():
         if len(vect) == 1: continue
         for e in vect:
-            duplicates.append([e[0], e[1], e[-1], k])
+            duplicates.append([k, e[0], e[1], e[-1]])
         
     destination_dir = os.path.expanduser(pargs.output)
     report_file = ( destination_dir + os.sep + 
@@ -116,6 +215,7 @@ def show_args(pargs:object) -> None:
 
 
 def scan_source(src:str,
+                db:object,
                 bigger_than:int,
                 follow_links:bool=False, 
                 quiet:bool=False) -> Dict[str, list]:
@@ -155,23 +255,24 @@ def scan_source(src:str,
             
             # Note that this operation changes the times to "seconds ago"
             # from the start time of the scanning. 
-            stats = [ F.hash, data.st_size, 
+            stats = [ str(F), F.hash, data.st_size, 
                 start_time - data.st_mtime, 
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
             stats.append(score(stats))
-            oed[k] = stats
+            oed[k] = tuple(stats)
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
-    num_files = str(len(oed))
     if not quiet:
-        gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
+        gkf.tombstone(" :: ".join([src, elapsed_time, str(len(oed))]))
         
+    db.add_file_details(oed.values())
+
     return oed
 
 
-def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
+def scan_sources(pargs:object, db:object) -> Dict[str, os.stat_result]:
     """
     Perform the scan using the rules and places provided by the user.
 
@@ -189,7 +290,7 @@ def scan_sources(pargs:object) -> Dict[str, os.stat_result]:
             ]:
         if not pargs.quiet: gkf.tombstone(folder)
         oed =   { **oed, **scan_source(
-                    folder, pargs.small_file, pargs.follow, pargs.quiet
+                    folder, db, pargs.small_file, pargs.follow, pargs.quiet
                     ) }
 
     return oed
@@ -202,12 +303,12 @@ def score(stats:tuple) -> dict:
     this is trivial, but I put it in a separate function in
     case it gets large.
     """
-    return round(math.log(stats[1]) * sum(stats[2:]))
+    return round(math.log(stats[2]) * math.log(sum(stats[3:])))
 
 
 def dedup_help() -> int:
     """
-    dedup is a utility to find suspiciously familiar files that 
+    dedup is a utility to find suspiciously similiar files that 
     may be duplicates. It creates a directory of symbolic links
     that point to the files, and optionally (dangerously) removes
     them.
@@ -264,6 +365,9 @@ def dedup_help() -> int:
         [ NOTE: For both --dir and --home, the directory names may
         contain environment variables. They will be correctly
         expanded. -- end note. ]
+
+    --db
+        Name of a database file to contain the results.
 
     --follow 
         If present, symbolic links will be dereferenced for purposes
@@ -329,6 +433,7 @@ def dedup_main() -> int:
     parser = argparse.ArgumentParser(description='Find probable duplicate files.')
 
     parser.add_argument('-?', '--explain', action='store_true')
+    parser.add_argument('--db', type=str, default="~/dedup.db")
     parser.add_argument('--dir', type=str, action='append', default=None)
     parser.add_argument('--follow', action='store_true')
     parser.add_argument('--home', type=str, default='~')
@@ -346,8 +451,9 @@ def dedup_main() -> int:
     if pargs.explain: return dedup_help()
 
     show_args(pargs)
+    db = DeDupDB(pargs.db)
 
-    return report(flip_dict(scan_sources(pargs)), pargs)
+    return report(flip_dict(scan_sources(pargs, db)), pargs)
 
 
 if __name__ == '__main__':
