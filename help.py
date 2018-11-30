@@ -1,3 +1,5 @@
+import os
+
 def dedup_help() -> int:
     """
     dedup is a utility to find suspiciously similiar files that 

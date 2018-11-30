@@ -199,13 +199,22 @@ def scan_source(src:str,
             try:
                 data = stat_function(k)
             except PermissionError as e:                # cannot stat it.
+                print("!perms {}".format(k))
                 continue
 
-            if data.st_uid * data.st_gid == 0: continue # belongs to root.
-            if data.st_size < bigger_than: continue     # small file; why worry?
+            if data.st_uid * data.st_gid == 0: 
+                print("!oroot {}".format(k))
+                continue # belongs to root.
+
+            if data.st_size < bigger_than:     # small file; why worry?
+                print("!small {}".format(k))
+                continue
+
             if data.st_uid != my_uid:                   # Is it even my file?
                 chmod_bits = data.st_mode & stat.S_IMODE
-                if chmod_bits & 0o20 != 0o20: continue  # cannot remove it.
+                if chmod_bits & 0o20 != 0o20: 
+                    print("!del  {}".format(k))
+                    continue  # cannot remove it.
 
             F = fname.Fname(k)
             
@@ -216,7 +225,7 @@ def scan_source(src:str,
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
             stats.append(score(stats))
-            if not quiet: gkf.tombstone(k)
+            if not quiet: print("{} {}".format(F.hash, str(F)))
             oed[k] = stats
 
     stop_time = time.time()
