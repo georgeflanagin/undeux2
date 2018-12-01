@@ -14,9 +14,9 @@ def dedup_help() -> int:
 
     dedup works by creating a score for each file that indicates the
     likelihood that it is a candidate for removal. The scoring is on
-    the closed interval [0 .. 1], where zero indicates that the file
-    may not be removed, and 1 indicates that if you don't remove it
-    fairly soon, WW III will break out. Most files are somewhere 
+    the half open interval [0 .. 1), where zero indicates that the file
+    may not be removed, and values near 1 indicate that if you don't 
+    remove it fairly soon, WW III will break out. Most files are somewhere 
     between.
 
     Files that you cannot remove are given a zero.
@@ -25,7 +25,7 @@ def dedup_help() -> int:
     Files with the same name as a newer file, and that have at least
         one common ancestor directory are penalized even more.
     Files are penalized if their contents exactly match another
-        file. This is the final step. There is no need to read every
+        file. This is the final step. There is no need to compare every
         file because if two files have different lengths, they 
         are obviously not the same file.
     
@@ -50,7 +50,9 @@ def dedup_help() -> int:
 
     [ --dir {dir-name} [--dir {dir-name} .. ]] 
         This is an optional parameter to name several directories,
-        mount points, or drives to include in the search. 
+        mount points, or drives to include in the search. If --dir
+        is present, the --home is only used if it is explicitly
+        named.
 
     --home {dir-name}
         Where you want to start looking, and go down from there. This
@@ -61,7 +63,8 @@ def dedup_help() -> int:
         expanded. -- end note. ]
 
     --db
-        Name of a database file to contain the results.
+        Name of a database file to contain the results, and/or the
+        database containing [partial] results from previous runs.
 
     --follow 
         If present, symbolic links will be dereferenced for purposes
@@ -74,7 +77,8 @@ def dedup_help() -> int:
 
     --ignore-extensions
         This option is useful with media files where there may be
-        .jpg and .JPG and .jpeg files all mixed together.
+        .jpg and .JPG and .jpeg files all mixed together. By default,
+        --ignore-extensions is *OFF*.
 
     --ignore-filenames
         This option is useful when searching several mount points or
@@ -105,7 +109,7 @@ def dedup_help() -> int:
 
     --quiet 
         I know what I am doing. Just let me know when you are finished. 
-        There is no verbose option because the program kinda rattles on 
+        There is no --verbose option because the program kinda rattles on 
         interminably. By default, --quiet is *OFF*
 
     --small-file {int} 

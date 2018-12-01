@@ -41,6 +41,7 @@ schema = [
     """CREATE TABLE filelist ( 
     filename VARCHAR(1000) NOT NULL
     ,content_hash CHAR(32) NOT NULL
+    ,size INTEGER
     ,modify_age float NOT NULL
     ,access_age float NOT NULL
     ,create_age float NOT NULL
@@ -53,7 +54,7 @@ class DeDupDB(sqlitedb.SQLiteDB):
     def __init__(self, path_to_db:str, force_new_db:bool = False, extra_DDL:list=[]):
         sqlitedb.SQLiteDB.__init__(self, path_to_db, force_new_db, extra_DDL)
 
-    def add_file_details(self, fileinfo:list) -> bool:
+    def add_file_details(self, fileinfo:List[tuple]) -> bool:
         """
         Populate the filelist. Returns whether all the info was added.
             stats = [ str(F), F.hash, data.st_size, 
@@ -65,17 +66,19 @@ class DeDupDB(sqlitedb.SQLiteDB):
 
         SQL = """insert into filelist values (?, ?, ?, ?, ?, ?, ?)"""
         fileinfo = gkf.listify(fileinfo)
-        i = 0
 
         if len(fileinfo) > 100: self._keys_off()
-        for t in fileinfo: 
-            try:
-                self.cursor.execute(SQL, t)   
-                i += 1
-            except:
-                pass
-        self.db.commit()    
-        if len(fileinfo) > 100: self._keys_on()
+        try:
+            for i, rec in enumerate(fileinfo): 
+                try:
+                    self.cursor.execute(SQL, rec)   
+                except Exception as e:
+                    print("{}".format(str(e), rec))
+                    sys.exit(os.EX_DATAERR)
+
+        finally:
+            self.db.commit()    
+            if len(fileinfo) > 100: self._keys_on()
 
         return i == len(fileinfo)
 
@@ -225,16 +228,15 @@ def scan_source(src:str,
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
             stats.append(score(stats))
-            if not quiet: print("{} {}".format(F.hash, str(F)))
             oed[k] = stats
+            print("{}".format(stats))
+            db.add_file_details(tuple(stats))
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
     num_files = str(len(oed))
     gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
         
-    db.add_file_details(oed.values())
-
     return oed
 
 
