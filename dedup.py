@@ -107,8 +107,9 @@ def flip_dict(oed:dict, quiet:bool=False) -> dict:
             new_key = stat_data[0]
             unique_files[new_key].append(new_tuple)
 
-        except KeyError as e:
-            break
+        except Exception as e:
+            print(str(e))
+            continue
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time - start_time, 3))
@@ -272,7 +273,11 @@ def score(stats:tuple) -> dict:
     """
     try:
         if not all(stats[1:]): return 0
-        return round(math.log(stats[2]) + math.log(sum(stats[3:])), 3) 
+        raw_score = round(math.log(stats[2]) + math.log(sum(stats[3:])), 3) 
+        steepness = -0.25
+        mid_point = 20
+
+        return 1/(math.exp(steepness*(raw_score - mid_point))+1)
 
     except Exception as e:
         gkf.tombstone(str(e))
