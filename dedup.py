@@ -67,6 +67,7 @@ class DeDupDB(sqlitedb.SQLiteDB):
         SQL = """insert into filelist values (?, ?, ?, ?, ?, ?, ?)"""
         fileinfo = gkf.listify(fileinfo)
 
+        i = 0
         if len(fileinfo) > 100: self._keys_off()
         try:
             for i, rec in enumerate(fileinfo): 
@@ -137,7 +138,7 @@ def report(d:dict, pargs:object) -> int:
             csvfile.writerow(row)
     gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
 
-    if pargs.links: 
+    if pargs.link_dir: 
         link_dir = destination_dir + os.sep + 'links'
         gkf.mkdir(link_dir)
         for dup in duplicates:
@@ -176,7 +177,8 @@ def scan_source(src:str,
                 db:object,
                 bigger_than:int,
                 follow_links:bool=False, 
-                quiet:bool=False) -> Dict[str, list]:
+                quiet:bool=False,
+                verbose:bool=False) -> Dict[str, list]:
     """
     Build the list of files and their relevant data from os.stat.
     Note that we skip files that we cannot write to (i.e., delete),
@@ -198,26 +200,25 @@ def scan_source(src:str,
         if '/.' in root_dir: continue
         gkf.tombstone('scanning ' + root_dir)
         for f in files:
+            stats = []
             k = os.path.join(root_dir, f)
             try:
                 data = stat_function(k)
             except PermissionError as e:                # cannot stat it.
-                print("!perms {}".format(k))
+                if verbose: print("!perms {}".format(k))
                 continue
 
             if data.st_uid * data.st_gid == 0: 
-                print("!oroot {}".format(k))
+                if verbose: print("!oroot {}".format(k))
                 continue # belongs to root.
 
             if data.st_size < bigger_than:     # small file; why worry?
-                print("!small {}".format(k))
+                if verbose: print("!small {}".format(k))
                 continue
 
             if data.st_uid != my_uid:                   # Is it even my file?
-                chmod_bits = data.st_mode & stat.S_IMODE
-                if chmod_bits & 0o20 != 0o20: 
-                    print("!del  {}".format(k))
-                    continue  # cannot remove it.
+                if verbose: print("!nodel {}".format(k))
+                continue  # cannot remove it.
 
             F = fname.Fname(k)
             
@@ -228,14 +229,15 @@ def scan_source(src:str,
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
             stats.append(score(stats))
-            oed[k] = stats
-            print("{}".format(stats))
-            db.add_file_details(tuple(stats))
+            oed[k] = tuple(stats)
+            if verbose: print("{}".format(stats))
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
     num_files = str(len(oed))
     gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
+    
+    db.add_file_details(tuple(stats))
         
     return oed
 
@@ -249,16 +251,14 @@ def scan_sources(pargs:object, db:object) -> Dict[str, os.stat_result]:
 
     returns -- a dict of filenames and stats.
     """
-    folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(pargs.home)
+    folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(os.expanduser('~'))
 
     oed = {}
-    for folder in [ 
-            os.path.expanduser(os.path.expandvars(_)) 
-            for _ in folders if _ 
-            ]:
-        oed =   { **oed, **scan_source(
-                    folder, db, pargs.small_file, pargs.follow, pargs.quiet
-                    ) }
+    for folder in [ os.path.expanduser(os.path.expandvars(_)) 
+            for _ in folders if _ ]:
+        oed.update(scan_source(
+                    folder, db, pargs.small_file, pargs.follow, 
+                    pargs.quiet, pargs.verbose)) 
 
     return oed
 
@@ -285,40 +285,64 @@ def dedup_main() -> int:
     This function loads the arguments, creates the console,
     and runs the program. IOW, this is it.
     """
+
+    # If someone has supplied no arguments, then show the help.
+    if len(sys.argv)==1: return dedup_help()
+
     parser = argparse.ArgumentParser(description='Find probable duplicate files.')
 
     parser.add_argument('-?', '--explain', action='store_true')
-    parser.add_argument('--db', type=str, default="~/dedup.db",
+
+    parser.add_argument('--db', type=str, default="~/dedups/dedup.db",
         help="location of SQLite database of hashes.")
-    parser.add_argument('--dir', type=str, action='append', default=None,
-        help="directory to investigate (if not this one)")
+
+    parser.add_argument('--dir', action='append',
+        help="directory to investigate (if not your home dir)")
+
+    parser.add_argument('-x', '--exclude', action='append',
+        help="one or more directories to ignore.")
+
+    parser.add_argument('--export', type=str, default=None,
+        choices=('csv', 'pack', 'msgpack', None),
+        help="if present, export the database in this format.")
+
     parser.add_argument('--follow', action='store_true',
         help="follow symbolic links -- default is not to.")
-    parser.add_argument('--home', type=str, default='~',
-        help="default location is the user's home directory.")
+
     parser.add_argument('--ignore-extensions', action='store_true',
         help="do not consider extension when comparing files.")
-    parser.add_argument('--ignore-filenames', action='store_true',
-        help="do not consider the file names as distinguishing characteristics.")
-    parser.add_argument('--links', action='store_true')
+
+    parser.add_argument('--link-dir', action='store_true')
+
+    parser.add_argument('--just-do-it', action='store_true',
+        help="run the program using the defaults.")
+
     parser.add_argument('--nice', type=int, default=20,
         help="by default, this program runs /very/ nicely at nice=20")
+
     parser.add_argument('--output', type=str, default='.',
         help="where to write the log file. The default is $PWD.")
+
     parser.add_argument('--quiet', action='store_true',
         help="eliminates narrative while running.")
+
     parser.add_argument('--small-file', type=int, default=4096,
-        help="files less than this size (default 4096) are not considered.")
+        help="files less than this size (default 4096) are not evaluated.")
+
+    parser.add_argument('--verbose', action='store_true',
+        help="go into way too much detail.")
+
     parser.add_argument('--version', action='store_true')
-    parser.add_argument('--young-file', type=int, default=365,
-        help="how recently must a file have been created to be 'young'? default is 365")
+
+    parser.add_argument('--young-file', type=int, default=30,
+        help="default is 30 days")
 
     pargs = parser.parse_args()
-    gkf.mkdir(pargs.output)
+    show_args(pargs)
     if pargs.explain: return dedup_help()
 
-    show_args(pargs)
-    db = DeDupDB(pargs.db, False, [])
+    gkf.mkdir(pargs.output)
+    db = DeDupDB(pargs.db)
     os.nice(pargs.nice)
 
     return report(flip_dict(scan_sources(pargs, db)), pargs)

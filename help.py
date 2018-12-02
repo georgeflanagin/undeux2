@@ -1,34 +1,60 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+#pragma pylint=off
+    
+# Credits
+__author__ =        'George Flanagin'
+__copyright__ =     'Copyright 2017 George Flanagin'
+__credits__ =       'None. This idea has been around forever.'
+__version__ =       '1.0'
+__maintainer__ =    'George Flanagin'
+__email__ =         'me+dedup@georgeflanagin.com'
+__status__ =        'continual development.'
+__license__ =       'MIT'
+
 import os
+
+import gkflib as gkf
 
 def dedup_help() -> int:
     """
-    dedup is a utility to find suspiciously similiar files that 
+    `dedup` is a utility to find suspiciously similiar files that 
     may be duplicates. It creates a directory of symbolic links
-    that point to the files, and optionally (dangerously) removes
-    them.
+    that point to the suspect files, and optionally (and dangerously) 
+    removes them.
 
-    All the command line arguments have defaults. To run the program
-    with the switches you have supplied, and skip the interrogation
-    by the console, use the --quiet option in combination with other
-    options, and you just rocket along.
+    All the command line arguments have defaults. If you run the program
+    with no arguments, you will be reading this help, just like you are
+    right now. If you want to accept all the defaults, use the single
+    argument:
+
+        dedup --just-do-it
 
     dedup works by creating a score for each file that indicates the
     likelihood that it is a candidate for removal. The scoring is on
     the half open interval [0 .. 1), where zero indicates that the file
     may not be removed, and values near 1 indicate that if you don't 
-    remove it fairly soon, WW III will break out. Most files are somewhere 
-    between.
+    remove it fairly soon, WW III will break out somewhere near your
+    disc drive[s]. Most files are somewhere between.
 
-    Files that you cannot remove are given a zero.
-    Files are penalized for not having been accesses in a long time.
-    Files with the same name as a newer file, are penalized.
-    Files with the same name as a newer file, and that have at least
+    To elaborate:
+
+    - Files that you cannot remove are given a zero, and not further
+        incorporated into the removal logic.
+    - Files are penalized for not having been accesses in a long time.
+    - Files with the same name as a newer file, are penalized.
+    - Files with the same name as a newer file, and that have at least
         one common ancestor directory are penalized even more.
-    Files are penalized if their contents exactly match another
+    - Files are penalized if their contents exactly match another
         file. This is the final step. There is no need to compare every
         file because if two files have different lengths, they 
         are obviously not the same file.
     
+    Users of LaTeX may note that this is the same logic used to determine
+    page breaks, namely that all page breaks are ugly, and we choose
+    the least ugly according to the rules. 
+
     So if you have an ancient file, that is a duplicate of some other
     file, with the same name, somewhere on the same mount point, and it 
     is large and hasn't been accessed in a while, then its score
@@ -37,34 +63,47 @@ def dedup_help() -> int:
 
     Through the options below, you will have a lot of control over
     how dedup works. You should read through all of them before you
-    run the program for the first time. If you have questions you
-    can read through this help a second time, or write to the author
-    at this address:
+    run the program for the first time, and as the author I recommend
+    that you choose just one or two directories to better understand
+    the effects of your choices. If you have questions you can read 
+    through this help a second time, or write to me at this address:
 
         me+dedup@georgeflanagin.com
 
     THE OPTIONS:
     ==================================================================
 
-    -? / --help  :: This is it; you are here.
-
-    [ --dir {dir-name} [--dir {dir-name} .. ]] 
-        This is an optional parameter to name several directories,
-        mount points, or drives to include in the search. If --dir
-        is present, the --home is only used if it is explicitly
-        named.
-
-    --home {dir-name}
-        Where you want to start looking, and go down from there. This
-        defaults to the user's home directory. 
-
-        [ NOTE: For both --dir and --home, the directory names may
-        contain environment variables. They will be correctly
-        expanded. -- end note. ]
+    -? / --help / --explain :: This is it; you are here. There is no
+        more.
 
     --db
         Name of a database file to contain the results, and/or the
-        database containing [partial] results from previous runs.
+        database containing [partial] results from previous runs. By
+        default, the database is created as dedup.db in the directory
+        named by the --output switch.
+
+        At the conclusion of the run, the database is optionally 
+        exported to a CSV file named dedup.YYYY-MM-DD-HH-MM.csv 
+        or a file named dedup.YYYY-MM-DD-HH-MM.msgpack depending
+        on the value of --export.     
+
+    --dir {dir-name} [--dir {dir-name} .. ]
+        This is an optional parameter to name several directories,
+        mount points, or drives to include in the search. If --dir
+        is not present, the default value is the user's home.
+
+        [[ NOTE: --dir: the directory names may contain environment 
+        variables. They will be correctly expanded. -- end note. ]]
+
+    --exclude / -x {dir-name} [ -x {dir-name} .. ]
+        Exclude these dirs from consideration. This is done primarly
+        for excluding things like `.git` directories, where there 
+        are certainly no files that should be removed.        
+
+    --export {csv | [msg]pack }
+        By default, this switch is *OFF*. If you would like to export
+        the contents of the database then a file will be created
+        as described in the --db switch above.
 
     --follow 
         If present, symbolic links will be dereferenced for purposes
@@ -77,17 +116,18 @@ def dedup_help() -> int:
 
     --ignore-extensions
         This option is useful with media files where there may be
-        .jpg and .JPG and .jpeg files all mixed together. By default,
-        --ignore-extensions is *OFF*.
+        `.jpg` and `.JPG` and `.jpeg` files all mixed together. By 
+        default, --ignore-extensions is *OFF*. If this switch is
+        engaged, then x.jpg, x.JPG, and x.JpEg will all be considered
+        to be the same file name, possibly interfering with each 
+        other.
 
-    --ignore-filenames
-        This option is useful when searching several mount points or
-        directories that may have been created by different people
-        at different times. By default, --ignore-filenames is *OFF*
+    --just-do-it
+        Accept all defaults, and run the program.  
 
-    --links
+    --link-dir
         If this switch is present, the directory that is associated
-        with --output will contain a directory named 'links' that
+        with `--output` will contain a directory named 'links' that
         will have symbolic links to all the duplicate files. This 
         feature is for convenience in their removal.
 
@@ -100,17 +140,18 @@ def dedup_help() -> int:
     --output {directory-name} 
         This is the directory where names of possibly dup files will 
         be placed. The default is a directory named 'dedups' in the 
-        user's home directory. If the directory does not exist, dedup 
-        will attempt to create it. This directory is never examined
-        for duplicate files, or more correctly, any file in it is 
-        assumed to be unique and worth keeping. 
+        user's home directory, so `~/dedups` on Linux and UNIX, and
+        `C:\dedups` on Windows. If the directory does not exist, dedup 
+        will attempt to create it. 
 
-        The output is a CSV file named dedup.YYYY-MM-DD-HH-MM.csv
+        This directory is *never* examined for duplicate files, or more 
+        correctly, any file in it is assumed to be unique and worth keeping. 
 
     --quiet 
         I know what I am doing. Just let me know when you are finished. 
-        There is no --verbose option because the program kinda rattles on 
-        interminably. By default, --quiet is *OFF*
+        This option is normally off, and the program does provide info
+        as it runs. However, if logorrhea is your thing, then --verbose
+        is what you want.
 
     --small-file {int} 
         Define the size of a small file in bytes. These will be ignored. 
@@ -118,8 +159,23 @@ def dedup_help() -> int:
         in the directory system, but many projects depend on tiny and
         duplicate small .conf files being present. The default value is
         4096.
+
+    --verbose
+        Tell all.
+
+    --version
+        Print information about the version of the program and the libraries,
+        and then exit.
+
+    --young-file {int} 
+        Define how new a file needs to be to be ignored from processing.
+        The idea is that if you downloaded Apocalypse Now from Amazon only
+        one week ago, then you probably want to keep this whale even 
+        though it is 50+GB. 
+
+
     """
-    print(dedup_help.__doc__)
+    gkf.nicely_display(dedup_help.__doc__)
     return os.EX_OK
 
 
