@@ -93,8 +93,8 @@ def flip_dict(oed:dict, quiet:bool=False) -> dict:
         (filename + os.stat data + score) as the value. 
     """
     start_time = time.time() 
-    gkf.tombstone('analysis begun.')
     filecount = str(len(oed))
+    gkf.tombstone('analysis begun for {} files.'.format(filecount))
 
     unique_files = collections.defaultdict(list)
 
@@ -107,9 +107,13 @@ def flip_dict(oed:dict, quiet:bool=False) -> dict:
             new_key = stat_data[0]
             unique_files[new_key].append(new_tuple)
 
+        except KeyError as e:
+            # This is normal, and means there is nothing left in the dict.
+            break
+
         except Exception as e:
             print(str(e))
-            continue
+            break
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time - start_time, 3))
@@ -218,7 +222,7 @@ def scan_source(src:str,
                 continue
 
             if data.st_uid != my_uid:                   # Is it even my file?
-                if verbose: print("!nodel {}".format(k))
+                if verbose: print("!del   {}".format(k))
                 continue  # cannot remove it.
 
             F = fname.Fname(k)
@@ -252,7 +256,7 @@ def scan_sources(pargs:object, db:object) -> Dict[str, os.stat_result]:
 
     returns -- a dict of filenames and stats.
     """
-    folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(os.expanduser('~'))
+    folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(os.path.expanduser('~'))
 
     oed = {}
     for folder in [ os.path.expanduser(os.path.expandvars(_)) 
@@ -354,6 +358,10 @@ def dedup_main() -> int:
 
 
 if __name__ == '__main__':
+    if not os.getuid(): 
+        print('You cannot run this program as root.')
+        sys.exit(os.EX_CONFIG)
+
     sys.exit(dedup_main())
 else:
     pass
