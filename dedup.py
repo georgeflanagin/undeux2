@@ -25,6 +25,7 @@ import hashlib
 import math
 import operator
 import os
+import pprint
 import sqlite3
 import sys
 import time
@@ -101,14 +102,13 @@ def flip_dict(oed:dict, quiet:bool=False) -> dict:
     while True:
         try:
             name, stat_data = oed.popitem()
-            new_tuple = (name, 
-                stat_data[0], stat_data[1], stat_data[2], stat_data[3], stat_data[4], 
-                stat_data[5])
-            new_key = stat_data[0]
-            unique_files[new_key].append(new_tuple)
+            new_tuple = ( stat_data[0], stat_data[2], 
+                stat_data[3], stat_data[4], stat_data[5])
+            unique_files[stat_data[1]].append(new_tuple)
 
         except KeyError as e:
             # This is normal, and means there is nothing left in the dict.
+            if not quiet: pprint.pprint(unique_files)
             break
 
         except Exception as e:
@@ -164,20 +164,6 @@ def report(d:dict, pargs:object) -> int:
     return os.EX_OK
 
 
-def show_args(pargs:object) -> None:
-    """
-    Print out the program arguments as they would have been typed
-    in. Command line arguments have a -- in the front, and embedded
-    dashes in the option itself. These are removed and changed to
-    an underscore, respectively.
-    """
-    print("")
-    opt_string = ""
-    for _ in sorted(vars(pargs).items()):
-        opt_string += " --"+ _[0].replace("_","-") + " " + str(_[1])
-    print(opt_string + "\n")    
-
-
 def scan_source(src:str,
                 db:object,
                 bigger_than:int,
@@ -203,7 +189,7 @@ def scan_source(src:str,
     start_time = time.time()
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
         if '/.' in root_dir: continue
-        gkf.tombstone('scanning ' + root_dir)
+        gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
         for f in files:
             stats = []
             k = os.path.join(root_dir, f)
@@ -347,14 +333,14 @@ def dedup_main() -> int:
         help="default is 30 days")
 
     pargs = parser.parse_args()
-    show_args(pargs)
+    gkf.show_args(pargs)
     if pargs.explain: return dedup_help()
 
     gkf.mkdir(pargs.output)
     db = DeDupDB(pargs.db)
     os.nice(pargs.nice)
 
-    return report(flip_dict(scan_sources(pargs, db)), pargs)
+    return report(flip_dict(scan_sources(pargs, db), pargs.quiet), pargs)
 
 
 if __name__ == '__main__':
