@@ -15,12 +15,15 @@ import math
 
 class Scorer:
     
-    sigmoid_max = 1.0
-    sigmoid_incline = -0.15
-    sigmoid_midpoint = 37
-    
-    def __init__(self) -> None:
-        pass
+    def __init__(self,
+        max_value:float= 1.0,
+        incline:float= -0.15,
+        midpoint:float= 38) -> None:
+
+        self.sigmoid_max = max_value
+        self.sigmoid_incline = incline
+        self.sigmoid_midpoint = midpoint
+        
 
     def __call__(self, file_size:int,
         file_age_ago:int,
@@ -35,9 +38,10 @@ class Scorer:
             file_age = math.log(file_age_ago)
 
             total = sum([file_size, un_mod_time, un_used_time, file_age])
-            return ( Scorer.sigmoid_max / 
-                (math.exp(Scorer.sigmoid_incline*(total - Scorer.sigmoid_midpoint)) + 1) )
+            return ( self.sigmoid_max / 
+                (math.exp(self.sigmoid_incline*(total - self.sigmoid_midpoint)) + 1) )
 
         except Exception as e:
-            print(str(e))
-            return -1
+            # This happens when try to calculate stats for a file that is 
+            # in use. Clearly we need to keep it!
+            return 0
