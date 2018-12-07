@@ -132,6 +132,7 @@ def report(d:dict, pargs:object) -> int:
 def scan_source(src:str,
                 db:object,
                 bigger_than:int,
+                exclude:list=[],
                 follow_links:bool=False, 
                 quiet:bool=False,
                 verbose:bool=False) -> Dict[str, list]:
@@ -158,12 +159,15 @@ def scan_source(src:str,
     stat_function = os.stat if follow_links else os.lstat
     oed = collections.defaultdict(list)
 
+    exclude = gkf.listify(exclude)
     start_time = time.time()
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
         if '/.' in root_dir: continue
-
         gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
+
         for f in files:
+            if any(ex in f for ex in exclude): continue
+
             stats = []
             k = os.path.join(root_dir, f)
             try:
@@ -231,8 +235,8 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
         for folder in [ os.path.expanduser(os.path.expandvars(_)) 
                 for _ in folders if _ ]:
             f_data = scan_source(
-                        folder, db, pargs.small_file, pargs.follow, 
-                        pargs.quiet, pargs.verbose
+                        folder, db, pargs.small_file, pargs.exclude,
+                        pargs.follow, pargs.quiet, pargs.verbose
                         )
             for k in f_data:
                 if k not in oed:
