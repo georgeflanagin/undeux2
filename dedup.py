@@ -38,6 +38,8 @@ from   help import dedup_help
 import gkflib as gkf
 import sqlitedb
 import fname
+import score
+scorer = score.Scorer()
 
 schema = [
     """CREATE TABLE filelist ( 
@@ -146,6 +148,7 @@ def scan_source(src:str,
         the matching files as the value, each element of the list being
         a tuple.
     """
+    global scorer
 
     # This call helps us determine which files are ours.
     my_name, my_uid = gkf.me()
@@ -196,7 +199,7 @@ def scan_source(src:str,
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
 
-            stats.append(score(stats))
+            stats.append(scorer(stats[2], stats[5], stats[3], stats[4]))
             oed[F.hash].append((stats[0], stats[2], stats[3], stats[4], stats[5], stats[-1]))
             if verbose: print("{}".format(stats))
 
@@ -243,27 +246,6 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
 
     if not pargs.quiet: pprint.pprint(oed)
     return oed
-
-
-def score(stats:tuple) -> dict:
-    """
-    Create a score based on the stats which is arranged as
-    hash (ignored), size, mtime, atime, ctime. At the moment,
-    this is trivial, but I put it in a separate function in
-    case it gets large.
-    """
-    try:
-        if not all(stats[1:]): return 0
-        raw_score = round(math.log(stats[2]) + math.log(sum(stats[3:])), 3) 
-        steepness = -0.15
-        mid_point = 27
-
-        return 1/(math.exp(steepness*(raw_score - mid_point))+1)
-
-    except Exception as e:
-        gkf.tombstone(str(e))
-        gkf.tombstone(str(stats))
-        return 0
 
 
 def dedup_main() -> int:
