@@ -86,43 +86,6 @@ class DeDupDB(sqlitedb.SQLiteDB):
         return i == len(fileinfo)
 
 
-def flip_dict(oed:dict, quiet:bool=False) -> dict:
-    """
-    oed -- a dict with the filename as a key, and a list (digest + 
-        os.stat data + score) as a value.
-    
-    returns -- a dict with the digest as a key, and a list of matching 
-        (filename + os.stat data + score) as the value. 
-    """
-    start_time = time.time() 
-    filecount = str(len(oed))
-    gkf.tombstone('analysis begun for {} files.'.format(filecount))
-
-    unique_files = collections.defaultdict(list)
-
-    while True:
-        try:
-            name, stat_data = oed.popitem()
-            new_tuple = ( stat_data[0], stat_data[2], 
-                stat_data[3], stat_data[4], stat_data[5])
-            unique_files[stat_data[1]].append(new_tuple)
-
-        except KeyError as e:
-            # This is normal, and means there is nothing left in the dict.
-            if not quiet: pprint.pprint(unique_files)
-            break
-
-        except Exception as e:
-            print(str(e))
-            break
-
-    stop_time = time.time()
-    elapsed_time = str(round(stop_time - start_time, 3))
-    gkf.tombstone(" :: ".join(['analysis completed', elapsed_time, filecount]))        
-
-    return unique_files
-
-
 def report(d:dict, pargs:object) -> int:
     """
     report the worst offenders.
@@ -131,8 +94,7 @@ def report(d:dict, pargs:object) -> int:
     duplicates = []
     for k, vect in d.items():
         if len(vect) == 1: continue
-        for e in vect:
-            duplicates.append([k, e[0], e[1], e[-1]])
+        duplicates.append([k, vect[0], vect[1], vect[-1]])
         
     destination_dir = os.path.expanduser(pargs.output)
     report_file = ( destination_dir + os.sep + 
@@ -235,7 +197,7 @@ def scan_source(src:str,
                 start_time - data.st_ctime ]
 
             stats.append(score(stats))
-            oed[F.hash] = tuple( stats[0], stats[2], stats[3], stats[4], stats[5])
+            oed[F.hash].append((stats[0], stats[2], stats[3], stats[4], stats[5], stats[-1]))
             if verbose: print("{}".format(stats))
 
     stop_time = time.time()
@@ -261,19 +223,25 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
                     if pargs.dir else 
                 gkf.listify(os.path.expanduser('~')) )
 
-    oed = {}
+    oed = collections.defaultdict(list)
     try:
         for folder in [ os.path.expanduser(os.path.expandvars(_)) 
                 for _ in folders if _ ]:
-            oed.update(
-                    scan_source(
+            f_data = scan_source(
                         folder, db, pargs.small_file, pargs.follow, 
-                        pargs.quiet, pargs.verbose))
+                        pargs.quiet, pargs.verbose
+                        )
+            for k in f_data:
+                if k not in oed:
+                    oed[k] = f_data[k]
+                else:
+                    oed[k].extend(f_data[k])
  
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
         pass
 
+    if not pargs.quiet: pprint.pprint(oed)
     return oed
 
 
@@ -357,6 +325,7 @@ def dedup_main() -> int:
 
     pargs = parser.parse_args()
     gkf.show_args(pargs)
+
     if pargs.explain: return dedup_help()
     if pargs.version:
         print('UnDeux (c) 2019. George Flanagin and Associates.')
