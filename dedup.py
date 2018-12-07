@@ -20,6 +20,7 @@ import argparse
 import cmd
 import collections
 import csv
+from   datetime import datetime
 from   functools import reduce
 import hashlib
 import math
@@ -179,38 +180,51 @@ def scan_source(src:str,
     follow_links -- if true, we don't treat links as links. Instead
         we scan the item pointed to by the link.
     
-    returns -- a dict, keyed on the absolute path name, and with 
-        a list of info about the file as the value.
+    returns -- a dict, keyed on the hash, and with a list of info about 
+        the matching files as the value, each element of the list being
+        a tuple.
     """
+
+    # This call helps us determine which files are ours.
     my_name, my_uid = gkf.me()
+
+    # Two different approaches, depending on whether we are following
+    # symbolic links.
     stat_function = os.stat if follow_links else os.lstat
-    oed = {}
+    oed = collections.defaultdict(list)
 
     start_time = time.time()
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
         if '/.' in root_dir: continue
+
         gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
         for f in files:
             stats = []
             k = os.path.join(root_dir, f)
             try:
                 data = stat_function(k)
-            except PermissionError as e:                # cannot stat it.
+            except PermissionError as e: 
+                # cannot stat it.
                 if verbose: print("!perms {}".format(k))
                 continue
 
             if data.st_uid * data.st_gid == 0: 
+                # belongs to root in some way.
                 if verbose: print("!oroot {}".format(k))
-                continue # belongs to root.
+                continue 
 
-            if data.st_size < bigger_than:     # small file; why worry?
+            if data.st_size < bigger_than:     
+                # small file; why worry?
                 if verbose: print("!small {}".format(k))
                 continue
 
-            if data.st_uid != my_uid:                   # Is it even my file?
+            if data.st_uid != my_uid:
+                # Not even my file.
                 if verbose: print("!del   {}".format(k))
                 continue  # cannot remove it.
 
+            # This manoeuvre lets us read the contents and determine
+            # the hash.
             F = fname.Fname(k)
             
             # Note that this operation changes the times to "seconds ago"
@@ -219,8 +233,9 @@ def scan_source(src:str,
                 start_time - data.st_mtime, 
                 start_time - data.st_atime, 
                 start_time - data.st_ctime ]
+
             stats.append(score(stats))
-            oed[k] = tuple(stats)
+            oed[F.hash] = tuple( stats[0], stats[2], stats[3], stats[4], stats[5])
             if verbose: print("{}".format(stats))
 
     stop_time = time.time()
@@ -233,7 +248,7 @@ def scan_source(src:str,
     return oed
 
 
-def scan_sources(pargs:object, db:object) -> Dict[str, os.stat_result]:
+def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
     """
     Perform the scan using the rules and places provided by the user.
 
@@ -242,15 +257,19 @@ def scan_sources(pargs:object, db:object) -> Dict[str, os.stat_result]:
 
     returns -- a dict of filenames and stats.
     """
-    folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(os.path.expanduser('~'))
+    folders = ( gkf.listify(pargs.dir) 
+                    if pargs.dir else 
+                gkf.listify(os.path.expanduser('~')) )
 
     oed = {}
     try:
         for folder in [ os.path.expanduser(os.path.expandvars(_)) 
                 for _ in folders if _ ]:
-            oed.update(scan_source(
-                    folder, db, pargs.small_file, pargs.follow, 
-                    pargs.quiet, pargs.verbose)) 
+            oed.update(
+                    scan_source(
+                        folder, db, pargs.small_file, pargs.follow, 
+                        pargs.quiet, pargs.verbose))
+ 
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
         pass
@@ -268,8 +287,8 @@ def score(stats:tuple) -> dict:
     try:
         if not all(stats[1:]): return 0
         raw_score = round(math.log(stats[2]) + math.log(sum(stats[3:])), 3) 
-        steepness = -0.25
-        mid_point = 20
+        steepness = -0.15
+        mid_point = 27
 
         return 1/(math.exp(steepness*(raw_score - mid_point))+1)
 
@@ -334,17 +353,24 @@ def dedup_main() -> int:
     parser.add_argument('--version', action='store_true')
 
     parser.add_argument('--young-file', type=int, default=30,
-        help="default is 30 days")
+        help="default is 30 days. You are clearly using it.")
 
     pargs = parser.parse_args()
     gkf.show_args(pargs)
     if pargs.explain: return dedup_help()
+    if pargs.version:
+        print('UnDeux (c) 2019. George Flanagin and Associates.')
+        print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
+        return os.EX_OK
 
     gkf.mkdir(pargs.output)
     db = DeDupDB(pargs.db)
+    if not db: return os.EX_DATAERR
+
+    # Always be nice.
     os.nice(pargs.nice)
 
-    return report(flip_dict(scan_sources(pargs, db), pargs.quiet), pargs)
+    return report(scan_sources(pargs, db), pargs)
 
 
 if __name__ == '__main__':
