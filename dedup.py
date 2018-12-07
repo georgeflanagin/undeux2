@@ -245,11 +245,15 @@ def scan_sources(pargs:object, db:object) -> Dict[str, os.stat_result]:
     folders = gkf.listify(pargs.dir) if pargs.dir else gkf.listify(os.path.expanduser('~'))
 
     oed = {}
-    for folder in [ os.path.expanduser(os.path.expandvars(_)) 
-            for _ in folders if _ ]:
-        oed.update(scan_source(
+    try:
+        for folder in [ os.path.expanduser(os.path.expandvars(_)) 
+                for _ in folders if _ ]:
+            oed.update(scan_source(
                     folder, db, pargs.small_file, pargs.follow, 
                     pargs.quiet, pargs.verbose)) 
+    except KeyboardInterrupt as e:
+        gkf.tombstone('interrupted by cntl-C')
+        pass
 
     return oed
 
