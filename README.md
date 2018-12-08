@@ -8,7 +8,7 @@ with no arguments, you will be reading this help, just like you are
 right now. If you want to accept all the defaults, use the single
 argument:
 
-undeux --just-do-it
+`undeux --just-do-it`
 
 undeux works by creating a score for each file that indicates the
 likelihood that it is a candidate for removal. The scoring is on
@@ -21,7 +21,7 @@ To elaborate:
 
 - Files that you cannot remove are given a zero, and not further
 incorporated into the removal logic.
-- Files are penalized for not having been accesses in a long time.
+- Files are penalized for not having been accessed in a long time.
 - Files with the same name as a newer file, are penalized.
 - Files with the same name as a newer file, and that have at least
 one common ancestor directory are penalized even more.
@@ -52,10 +52,10 @@ me+undeux@georgeflanagin.com
 THE OPTIONS:
 ==================================================================
 
--? / --help / --explain :: This is it; you are here. There is no
+`-? / --help / --explain` :: This is it; you are here. There is no
 more.
 
---db
+`--db`
 Name of a database file to contain the results, and/or the
 database containing [partial] results from previous runs. By
 default, the database is created as undeux.db in the directory
@@ -66,25 +66,25 @@ exported to a CSV file named undeux.YYYY-MM-DD-HH-MM.csv
 or a file named undeux.YYYY-MM-DD-HH-MM.msgpack depending
 on the value of --export.     
 
---dir {dir-name} [--dir {dir-name} .. ]
+`--dir {dir-name} [--dir {dir-name} .. ]`
 This is an optional parameter to name several directories,
 mount points, or drives to include in the search. If --dir
 is not present, the default value is the user's home.
 
-[[ NOTE: --dir: the directory names may contain environment 
+[[ NOTE: `--dir:` the directory names may contain environment 
 variables. They will be correctly expanded. -- end note. ]]
 
---exclude / -x {dir-name} [ -x {dir-name} .. ]
+`--exclude / -x {dir-name} [ -x {dir-name} .. ]`
 Exclude these dirs from consideration. This is done primarly
 for excluding things like `.git` directories, where there 
 are certainly no files that should be removed.        
 
---export {csv | [msg]pack }
+`--export {csv | [msg]pack }`
 By default, this switch is *OFF*. If you would like to export
 the contents of the database then a file will be created
 as described in the --db switch above.
 
---follow 
+`--follow` 
 If present, symbolic links will be dereferenced for purposes
 of consideration of duplicates. Use of this switch requires
 careful consideration, and it is probably only useful in 
@@ -93,7 +93,7 @@ interest that are duplicates of things elsewhere that are
 mentioned by symbolic links that are *also* in your 
 directory of interest.
 
---ignore-extensions
+`--ignore-extensions`
 This option is useful with media files where there may be
 `.jpg` and `.JPG` and `.jpeg` files all mixed together. By 
 default, --ignore-extensions is *OFF*. If this switch is
@@ -101,22 +101,22 @@ engaged, then x.jpg, x.JPG, and x.JpEg will all be considered
 to be the same file name, possibly interfering with each 
 other.
 
---just-do-it
+`--just-do-it`
 Accept all defaults, and run the program.  
 
---link-dir
+`--link-dir`
 If this switch is present, the directory that is associated
 with `--output` will contain a directory named 'links' that
 will have symbolic links to all the duplicate files. This 
 feature is for convenience in their removal.
 
---nice {int} 
+`--nice {int}` 
 Keep in mind a terabyte of disc could hold one million files 
 at one megabyte each. You should be nice, and frankly, the program
 may run faster in nice mode. The default value is 20, which
 on Linux is as nice as you can be.
 
---output {directory-name} 
+`--output {directory-name}` 
 This is the directory where names of possibly dup files will 
 be placed. The default is a directory named 'undeuxs' in the 
 user's home directory, so `~/undeuxs` on Linux and UNIX, and
@@ -126,27 +126,27 @@ will attempt to create it.
 This directory is *never* examined for duplicate files, or more 
 correctly, any file in it is assumed to be unique and worth keeping. 
 
---quiet 
+`--quiet` 
 I know what I am doing. Just let me know when you are finished. 
 This option is normally off, and the program does provide info
 as it runs. However, if logorrhea is your thing, then --verbose
 is what you want.
 
---small-file {int} 
+`--small-file {int}` 
 Define the size of a small file in bytes. These will be ignored. 
 Many duplicate small files will indeed clutter the inode space
 in the directory system, but many projects depend on tiny and
 duplicate small .conf files being present. The default value is
 4096.
 
---verbose
+`--verbose`
 Tell all.
 
---version
+`--version`
 Print information about the version of the program and the libraries,
 and then exit.
 
---young-file {int} 
+`--young-file {int}` 
 Define how new a file needs to be to be ignored from processing.
 The idea is that if you downloaded Apocalypse Now from Amazon only
 one week ago, then you probably want to keep this whale even 
