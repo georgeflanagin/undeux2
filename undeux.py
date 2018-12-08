@@ -330,7 +330,7 @@ def undeux_main() -> int:
         print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
         return os.EX_OK
 
-    gkf.mkdir(pargs.output)
+    gkf.make_dir_or_die(pargs.output)
     db = DeDupDB(pargs.db)
     if not db: return os.EX_DATAERR
 

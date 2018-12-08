@@ -141,7 +141,7 @@ def undeux_help() -> int:
         This is the directory where names of possibly dup files will 
         be placed. The default is a directory named 'undeuxs' in the 
         user's home directory, so `~/undeuxs` on Linux and UNIX, and
-        `C:\undeuxs` on Windows. If the directory does not exist, undeux 
+        `C:\\undeuxs` on Windows. If the directory does not exist, undeux 
         will attempt to create it. 
 
         This directory is *never* examined for duplicate files, or more 
@@ -172,9 +172,8 @@ def undeux_help() -> int:
         The idea is that if you downloaded Apocalypse Now from Amazon only
         one week ago, then you probably want to keep this whale even 
         though it is 50+GB. 
-
-
     """
+
     gkf.nicely_display(undeux_help.__doc__)
     return os.EX_OK
 

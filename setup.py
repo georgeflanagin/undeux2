@@ -14,8 +14,10 @@ setuptools.setup(
     url="https://github.com/georgeflanagin/undeux",
     packages=setuptools.find_packages(),
     classifiers=[
-        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
         "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent"
+        "Operating System :: OS Independent",
+        "Topic :: System :: Filesystems",
+        "Topic :: Utilities"
     ],
 )
