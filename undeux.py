@@ -272,7 +272,7 @@ def undeux_main() -> int:
     parser.add_argument('--db', type=str, default=None,
         help="location of SQLite database of hashes.")
 
-    parser.add_argument('--dir', action='append',
+    parser.add_argument('--dir', action='append', default=".",
         help="directory to investigate (if not your home dir)")
 
     parser.add_argument('-x', '--exclude', action='append',
