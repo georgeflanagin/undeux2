@@ -31,14 +31,12 @@ import sqlite3
 import sys
 import time
 
-from os import walk, remove, stat
-from os.path import join as joinpath
-
-from   help import undeux_help
-import gkflib as gkf
-import sqlitedb
 import fname
+import gkflib as gkf
+from   help import undeux_help
 import score
+import sqlitedb
+
 scorer = score.Scorer()
 
 schema = [
@@ -52,7 +50,6 @@ schema = [
     ,score float DEFAULT 0
     )"""
     ]
-
 
 class DeDupDB(sqlitedb.SQLiteDB):
     def __init__(self, path_to_db:str, force_new_db:bool = False, extra_DDL:list=[]):
@@ -258,6 +255,7 @@ def undeux_main() -> int:
     This function loads the arguments, creates the console,
     and runs the program. IOW, this is it.
     """
+    global schema
 
     # If someone has supplied no arguments, then show the help.
     if len(sys.argv)==1: return undeux_help()
@@ -266,7 +264,7 @@ def undeux_main() -> int:
 
     parser.add_argument('-?', '--explain', action='store_true')
 
-    parser.add_argument('--db', type=str, default="~/undeux/undeux.db",
+    parser.add_argument('--db', type=str, default=None,
         help="location of SQLite database of hashes.")
 
     parser.add_argument('--dir', action='append',
@@ -289,6 +287,9 @@ def undeux_main() -> int:
 
     parser.add_argument('--just-do-it', action='store_true',
         help="run the program using the defaults.")
+
+    parser.add_argument('--new', action='store_true',
+        help="create a new database, even if it already exists.")
 
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
@@ -329,9 +330,11 @@ def undeux_main() -> int:
         print('UnDeux (c) 2019. George Flanagin and Associates.')
         print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
         return os.EX_OK
+    if not pargs.db: 
+        pargs.db = os.path.join(pargs.output, 'undeux.db')
 
     gkf.make_dir_or_die(pargs.output)
-    db = DeDupDB(pargs.db)
+    db = DeDupDB(pargs.db, pargs.new, schema)
     if not db: return os.EX_DATAERR
 
     # Always be nice.
