@@ -9,7 +9,7 @@ __copyright__ =     'Copyright 2017 George Flanagin'
 __credits__ =       'None. This idea has been around forever.'
 __version__ =       '1.0'
 __maintainer__ =    'George Flanagin'
-__email__ =         'me+dedup@georgeflanagin.com'
+__email__ =         'me+undeux@georgeflanagin.com'
 __status__ =        'continual development.'
 __license__ =       'MIT'
 
@@ -17,9 +17,9 @@ import os
 
 import gkflib as gkf
 
-def dedup_help() -> int:
+def undeux_help() -> int:
     """
-    `dedup` is a utility to find suspiciously similiar files that 
+    `undeux` is a utility to find suspiciously similiar files that 
     may be duplicates. It creates a directory of symbolic links
     that point to the suspect files, and optionally (and dangerously) 
     removes them.
@@ -29,9 +29,9 @@ def dedup_help() -> int:
     right now. If you want to accept all the defaults, use the single
     argument:
 
-        dedup --just-do-it
+        undeux --just-do-it
 
-    dedup works by creating a score for each file that indicates the
+    undeux works by creating a score for each file that indicates the
     likelihood that it is a candidate for removal. The scoring is on
     the half open interval [0 .. 1), where zero indicates that the file
     may not be removed, and values near 1 indicate that if you don't 
@@ -62,13 +62,13 @@ def dedup_help() -> int:
     offenders.
 
     Through the options below, you will have a lot of control over
-    how dedup works. You should read through all of them before you
+    how undeux works. You should read through all of them before you
     run the program for the first time, and as the author I recommend
     that you choose just one or two directories to better understand
     the effects of your choices. If you have questions you can read 
     through this help a second time, or write to me at this address:
 
-        me+dedup@georgeflanagin.com
+        me+undeux@georgeflanagin.com
 
     THE OPTIONS:
     ==================================================================
@@ -79,12 +79,12 @@ def dedup_help() -> int:
     --db
         Name of a database file to contain the results, and/or the
         database containing [partial] results from previous runs. By
-        default, the database is created as dedup.db in the directory
+        default, the database is created as undeux.db in the directory
         named by the --output switch.
 
         At the conclusion of the run, the database is optionally 
-        exported to a CSV file named dedup.YYYY-MM-DD-HH-MM.csv 
-        or a file named dedup.YYYY-MM-DD-HH-MM.msgpack depending
+        exported to a CSV file named undeux.YYYY-MM-DD-HH-MM.csv 
+        or a file named undeux.YYYY-MM-DD-HH-MM.msgpack depending
         on the value of --export.     
 
     --dir {dir-name} [--dir {dir-name} .. ]
@@ -139,9 +139,9 @@ def dedup_help() -> int:
 
     --output {directory-name} 
         This is the directory where names of possibly dup files will 
-        be placed. The default is a directory named 'dedups' in the 
-        user's home directory, so `~/dedups` on Linux and UNIX, and
-        `C:\dedups` on Windows. If the directory does not exist, dedup 
+        be placed. The default is a directory named 'undeuxs' in the 
+        user's home directory, so `~/undeuxs` on Linux and UNIX, and
+        `C:\undeuxs` on Windows. If the directory does not exist, undeux 
         will attempt to create it. 
 
         This directory is *never* examined for duplicate files, or more 
@@ -175,7 +175,7 @@ def dedup_help() -> int:
 
 
     """
-    gkf.nicely_display(dedup_help.__doc__)
+    gkf.nicely_display(undeux_help.__doc__)
     return os.EX_OK
 
 

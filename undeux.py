@@ -9,7 +9,7 @@ __copyright__ =     'Copyright 2017 George Flanagin'
 __credits__ =       'None. This idea has been around forever.'
 __version__ =       '1.0'
 __maintainer__ =    'George Flanagin'
-__email__ =         'me+dedup@georgeflanagin.com'
+__email__ =         'me+undeux@georgeflanagin.com'
 __status__ =        'continual development.'
 __license__ =       'MIT'
 
@@ -34,7 +34,7 @@ import time
 from os import walk, remove, stat
 from os.path import join as joinpath
 
-from   help import dedup_help
+from   help import undeux_help
 import gkflib as gkf
 import sqlitedb
 import fname
@@ -100,7 +100,7 @@ def report(d:dict, pargs:object) -> int:
         
     destination_dir = os.path.expanduser(pargs.output)
     report_file = ( destination_dir + os.sep + 
-            'dedup.' + gkf.now_as_string('-') + '.csv')
+            'undeux.' + gkf.now_as_string('-') + '.csv')
 
     with open(report_file, 'w+') as f:
         csvfile = csv.writer(f)
@@ -166,10 +166,11 @@ def scan_source(src:str,
         gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
 
         for f in files:
-            if any(ex in f for ex in exclude): continue
 
             stats = []
             k = os.path.join(root_dir, f)
+            if any(ex in k for ex in exclude): continue
+
             try:
                 data = stat_function(k)
             except PermissionError as e: 
@@ -248,24 +249,24 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
         gkf.tombstone('interrupted by cntl-C')
         pass
 
-    if not pargs.quiet: pprint.pprint(oed)
+    if pargs.verbose: pprint.pprint(oed)
     return oed
 
 
-def dedup_main() -> int:
+def undeux_main() -> int:
     """
     This function loads the arguments, creates the console,
     and runs the program. IOW, this is it.
     """
 
     # If someone has supplied no arguments, then show the help.
-    if len(sys.argv)==1: return dedup_help()
+    if len(sys.argv)==1: return undeux_help()
 
     parser = argparse.ArgumentParser(description='Find probable duplicate files.')
 
     parser.add_argument('-?', '--explain', action='store_true')
 
-    parser.add_argument('--db', type=str, default="~/dedups/dedup.db",
+    parser.add_argument('--db', type=str, default="~/undeux/undeux.db",
         help="location of SQLite database of hashes.")
 
     parser.add_argument('--dir', action='append',
@@ -289,7 +290,7 @@ def dedup_main() -> int:
     parser.add_argument('--just-do-it', action='store_true',
         help="run the program using the defaults.")
 
-    parser.add_argument('--nice', type=int, default=20,
+    parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
 
     parser.add_argument('--output', type=str, default='.',
@@ -312,7 +313,18 @@ def dedup_main() -> int:
     pargs = parser.parse_args()
     gkf.show_args(pargs)
 
-    if pargs.explain: return dedup_help()
+    # We need to fix up a couple of the arguments. Let's convert the
+    # youth designation from days to seconds.
+    pargs.young_file = pargs.young_file * 60 * 60 * 24
+    
+    # And let's take care of env vars and other symbols in dir names.
+    pargs.output = str(fname.Fname(pargs.output))
+    pargs.dir = [ str(fname.Fname(_)) for _ in pargs.dir ]
+
+    print("arguments after translation:")
+    gkf.show_args(pargs)
+
+    if pargs.explain: return undeux_help()
     if pargs.version:
         print('UnDeux (c) 2019. George Flanagin and Associates.')
         print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
@@ -333,6 +345,6 @@ if __name__ == '__main__':
         print('You cannot run this program as root.')
         sys.exit(os.EX_CONFIG)
 
-    sys.exit(dedup_main())
+    sys.exit(undeux_main())
 else:
     pass

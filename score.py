@@ -6,7 +6,7 @@ __copyright__ =     'Copyright 2017 George Flanagin'
 __credits__ =       'None. This idea has been around forever.'
 __version__ =       '1.0'
 __maintainer__ =    'George Flanagin'
-__email__ =         'me+dedup@georgeflanagin.com'
+__email__ =         'me+undeux@georgeflanagin.com'
 __status__ =        'continual development.'
 __license__ =       'MIT'
 
