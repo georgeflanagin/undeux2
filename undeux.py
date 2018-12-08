@@ -111,20 +111,16 @@ def report(d:dict, pargs:object) -> int:
         gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
 
     if pargs.link_dir: 
-        link_dir = destination_dir + os.sep + 'links'
-        gkf.mkdir(link_dir)
-        for dup in duplicates:
-            f = fname.Fname(dup[0])
-            counter = 1
-            stub = f.fname + str(counter)
-            while True:
-                try:
-                    os.symlink(str(f), link_dir + os.sep + stub)
-                    break
-                except FileExistsError as e:
-                    counter += 1
-                    stub = f.fname + str(counter)
-                    continue
+        gkf.make_dir_or_die(pargs.link_dir)
+        for i, dup in enumerate(duplicates):
+            f = str(fname.Fname(dup[0]))
+            link_name = os.path.join(link_dir,str(i))
+            try:
+                os.unlink(link_name)
+            except FileNotFoundError as e:
+                pass
+            finally:
+                os.symlink(f, link_name)
 
         gkf.tombstone('links created.')
 
