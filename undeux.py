@@ -24,6 +24,7 @@ from   datetime import datetime
 from   functools import reduce
 import hashlib
 import math
+import msgpack
 import operator
 import os
 import pprint
@@ -95,15 +96,19 @@ def report(d:dict, pargs:object) -> int:
         if len(vect) == 1: continue
         duplicates.append([k, vect[0], vect[1], vect[-1]])
         
-    destination_dir = os.path.expanduser(pargs.output)
-    report_file = ( destination_dir + os.sep + 
-            'undeux.' + gkf.now_as_string('-') + '.csv')
+    destination_dir = pargs.output
+    report_file = "{}{}{}{}{}".format(destination_dir, os.sep, 
+            'undeux.', gkf.now_as_string('-'), pargs.export)
 
+    # Write the data.
     with open(report_file, 'w+') as f:
-        csvfile = csv.writer(f)
-        for row in duplicates:
-            csvfile.writerow(row)
-    gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
+        if pargs.export == 'csv':
+            csvfile = csv.writer(f)
+            for row in duplicates:
+                csvfile.writerow(row)
+        else:
+            f.write(msgpack.packb(duplicates, use_bin_type=True))
+        gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
 
     if pargs.link_dir: 
         link_dir = destination_dir + os.sep + 'links'
@@ -273,7 +278,7 @@ def undeux_main() -> int:
     parser.add_argument('-x', '--exclude', action='append',
         help="one or more directories to ignore.")
 
-    parser.add_argument('--export', type=str, default=None,
+    parser.add_argument('--export', type=str, default='csv',
         choices=('csv', 'pack', 'msgpack', None),
         help="if present, export the database in this format.")
 

@@ -131,6 +131,9 @@ def undeux_help() -> int:
         will have symbolic links to all the duplicate files. This 
         feature is for convenience in their removal.
 
+    --new
+        Force the creation of a new database if it exists.
+
     --nice {int} 
         Keep in mind a terabyte of disc could hold one million files 
         at one megabyte each. You should be nice, and frankly, the program
