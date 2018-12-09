@@ -119,9 +119,7 @@ def report(d:dict, pargs:object) -> int:
     if pargs.link_dir: 
         gkf.make_dir_or_die(pargs.link_dir)
         for i, dup in enumerate(duplicates):
-            print(dup)
-            exit()
-            f = str(fname.Fname(duplicates[dup][0]))
+            f = str(fname.Fname(dup[1][0]))
             link_name = os.path.join(pargs.link_dir,str(i))
             try:
                 os.unlink(link_name)
