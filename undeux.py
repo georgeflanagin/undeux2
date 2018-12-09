@@ -92,7 +92,12 @@ def report(d:dict, pargs:object) -> int:
     """
     duplicates = []
     gkf.tombstone('reporting.')
-    with_dups = {k:v for k, v in d.items() if len(v) != 1}
+    with_dups = {k:v for k, v in d.items() if len(v) > 1}
+    unique_files = {k:v for k, v in d.items() if len(v) == 1}
+    print(len(d))
+    print(len(with_dups))
+    print(len(unique_files))
+    exit()
     for k, v in with_dups.items():
         for vv in v:
             duplicates.append((k, vv))
@@ -247,10 +252,8 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
             for k in f_data:
                 if k not in oed:
                     oed[k] = f_data[k]
-                    print('assigning to {} := {}'.format(k, f_data[k]))
                 else:
                     oed[k].extend(f_data[k])
-                    print('extending on {} := {}'.format(k, f_data[k]))
  
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
@@ -277,7 +280,7 @@ def undeux_main() -> int:
     parser.add_argument('--db', type=str, default=None,
         help="location of SQLite database of hashes.")
 
-    parser.add_argument('--dir', action='append', default=["~"],
+    parser.add_argument('--dir', action='append', 
         help="directory to investigate (if not your home dir)")
 
     parser.add_argument('-x', '--exclude', action='append', default=[],
@@ -332,6 +335,7 @@ def undeux_main() -> int:
     # And let's take care of env vars and other symbols in dir names. Be
     # sure to eliminate duplicates.
     pargs.output = str(fname.Fname(pargs.output))
+    if not pargs.dir: pargs.dir = ['.']
     pargs.dir = list(set([ str(fname.Fname(_)) for _ in pargs.dir]))
     pargs.exclude = list(set([str(fname.Fname(_)) for _ in pargs.exclude]))
 
