@@ -96,9 +96,13 @@ def report(d:dict, pargs:object) -> int:
         if len(vect) == 1: continue
         duplicates.append([k, vect[0], vect[1], vect[-1]])
         
+    if not duplicates: 
+        print("No duplicates found. Nothing to report.")
+        return 0
+
     destination_dir = pargs.output
-    report_file = "{}{}{}{}{}".format(destination_dir, os.sep, 
-            'undeux.', gkf.now_as_string('-'), pargs.export)
+    report_file = "{}{}{}{}{}{}".format(destination_dir, os.sep, 
+            'undeux.', gkf.now_as_string('-'), ".", pargs.export)
 
     # Write the data.
     with open(report_file, 'w+') as f:
@@ -240,8 +244,10 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
             for k in f_data:
                 if k not in oed:
                     oed[k] = f_data[k]
+                    print('assigning to {} := {}'.format(k, f_data[k]))
                 else:
                     oed[k].extend(f_data[k])
+                    print('extending on {} := {}'.format(k, f_data[k]))
  
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
@@ -268,10 +274,10 @@ def undeux_main() -> int:
     parser.add_argument('--db', type=str, default=None,
         help="location of SQLite database of hashes.")
 
-    parser.add_argument('--dir', action='append', default=".",
+    parser.add_argument('--dir', action='append', default=["."],
         help="directory to investigate (if not your home dir)")
 
-    parser.add_argument('-x', '--exclude', action='append',
+    parser.add_argument('-x', '--exclude', action='append', default=["/."],
         help="one or more directories to ignore.")
 
     parser.add_argument('--export', type=str, default='csv',
@@ -289,7 +295,7 @@ def undeux_main() -> int:
     parser.add_argument('--just-do-it', action='store_true',
         help="run the program using the defaults.")
 
-    parser.add_argument('--new', action='store_true',
+    parser.add_argument('--new', action='store_true', 
         help="create a new database, even if it already exists.")
 
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
@@ -319,9 +325,10 @@ def undeux_main() -> int:
     # youth designation from days to seconds.
     pargs.young_file = pargs.young_file * 60 * 60 * 24
     
-    # And let's take care of env vars and other symbols in dir names.
+    # And let's take care of env vars and other symbols in dir names. Be
+    # sure to eliminate duplicates.
     pargs.output = str(fname.Fname(pargs.output))
-    pargs.dir = [ str(fname.Fname(_)) for _ in pargs.dir ]
+    pargs.dir = list(set([ str(fname.Fname(_)) for _ in pargs.dir ]))
 
     print("arguments after translation:")
     gkf.show_args(pargs)
@@ -335,7 +342,10 @@ def undeux_main() -> int:
         pargs.db = os.path.join(pargs.output, 'undeux.db')
 
     gkf.make_dir_or_die(pargs.output)
-    db = DeDupDB(pargs.db, pargs.new, schema)
+    if pargs.new:
+        db = DeDupDB(pargs.db, pargs.new, schema)
+    else:
+        db = DeDupDB(pargs.db)
     if not db: return os.EX_DATAERR
 
     # Always be nice.
