@@ -94,10 +94,6 @@ def report(d:dict, pargs:object) -> int:
     gkf.tombstone('reporting.')
     with_dups = {k:v for k, v in d.items() if len(v) > 1}
     unique_files = {k:v for k, v in d.items() if len(v) == 1}
-    print(len(d))
-    print(len(with_dups))
-    print(len(unique_files))
-    exit()
     for k, v in with_dups.items():
         for vv in v:
             duplicates.append((k, vv))
