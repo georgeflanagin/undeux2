@@ -90,13 +90,14 @@ def report(d:dict, pargs:object) -> int:
     """
     report the worst offenders.
     """
-    gkf.tombstone('reporting.')
     duplicates = []
-    for k, vect in d.items():
-        if len(vect) == 1: continue
-        duplicates.append([k, vect[0], vect[1], vect[-1]])
+    gkf.tombstone('reporting.')
+    with_dups = {k:v for k, v in d.items() if len(v) != 1}
+    for k, v in with_dups.items():
+        for vv in v:
+            duplicates.append((k, vv))
         
-    if not duplicates: 
+    if not with_dups: 
         print("No duplicates found. Nothing to report.")
         return 0
 
@@ -111,7 +112,7 @@ def report(d:dict, pargs:object) -> int:
             for row in duplicates:
                 csvfile.writerow(row)
         else:
-            f.write(msgpack.packb(duplicates, use_bin_type=True))
+            f.write(msgpack.packb(with_dups, use_bin_type=True))
         gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
 
     if pargs.link_dir: 
