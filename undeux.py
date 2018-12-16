@@ -52,6 +52,12 @@ schema = [
     )"""
     ]
 
+# Exception for getting out of a nested for-block.
+class OuterBlock:
+    def __init__(self) -> None:
+        pass
+
+
 class DeDupDB(sqlitedb.SQLiteDB):
     def __init__(self, path_to_db:str, force_new_db:bool = False, extra_DDL:list=[]):
         sqlitedb.SQLiteDB.__init__(self, path_to_db, force_new_db, extra_DDL)
@@ -84,6 +90,28 @@ class DeDupDB(sqlitedb.SQLiteDB):
             if len(fileinfo) > 100: self._keys_on()
 
         return i == len(fileinfo)
+
+
+
+
+class UltraDict(collections.defaultdict):
+    """
+    An UltraDict is a defaultdict with list values that are
+    automagically created or appended when we do the ultramerge
+    operation represented by the << operator.
+    """
+    def __init__(self) -> None:
+        collections.defaultdict.__init__(self, list)
+
+
+    def __lshift__(self, info:collections.defaultdict) -> UltraDict:
+        for k, v in info.items():
+            if k in self:
+                self[k].extend(info[k])
+            else:
+                self[k] = info[k]
+
+        return self
 
 
 def report(d:dict, pargs:object) -> int:
@@ -134,13 +162,16 @@ def report(d:dict, pargs:object) -> int:
 
 
 def scan_source(src:str,
-                db:object,
+                pargs:object,
+                db:object) -> Dict[int, list]:
+
+    """
                 bigger_than:int,
                 exclude:list=[],
                 follow_links:bool=False, 
                 quiet:bool=False,
-                verbose:bool=False) -> Dict[str, list]:
-    """
+                verbose:bool=False) -> Dict[int, list]:
+
     Build the list of files and their relevant data from os.stat.
     Note that we skip files that we cannot write to (i.e., delete),
     the small files, and anything we cannot stat.
@@ -160,13 +191,14 @@ def scan_source(src:str,
 
     # Two different approaches, depending on whether we are following
     # symbolic links.
-    stat_function = os.stat if follow_links else os.lstat
-    oed = collections.defaultdict(list)
+    stat_function = os.stat if pargs.follow_links else os.lstat
+    websters = collections.defaultdict(list)
 
-    exclude = gkf.listify(exclude)
+    exclude = gkf.listify(pargs.exclude)
     start_time = time.time()
+
     for root_dir, folders, files in os.walk(src, followlinks=follow_links):
-        if '/.' in root_dir: continue
+        if '/.' in root_dir and not pargs.include_hidden: continue
         gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
 
         for f in files:
@@ -203,26 +235,26 @@ def scan_source(src:str,
             
             # Note that this operation changes the times to "seconds ago"
             # from the start time of the scanning. 
-            stats = [ str(F), F.hash, data.st_size, 
+            stats = [ 
+                str(F),
                 start_time - data.st_mtime, 
                 start_time - data.st_atime, 
-                start_time - data.st_ctime ]
+                start_time - data.st_ctime 
+                ]
 
-            stats.append(scorer(stats[2], stats[5], stats[3], stats[4]))
-            oed[F.hash].append((stats[0], stats[2], stats[3], stats[4], stats[5], stats[-1]))
+            stats.append(scorer(data.st_size, stats[5], stats[3], stats[4]))
+            websters[data.st_size].append(stats)
             if verbose: print("{}".format(stats))
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
-    num_files = str(len(oed))
+    num_files = str(len(websters))
     gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
     
-    db.add_file_details(tuple(stats))
-        
-    return oed
+    return websters
 
 
-def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
+def scan_sources(pargs:object, db:object) -> Dict[int, List[tuple]]:
     """
     Perform the scan using the rules and places provided by the user.
 
@@ -235,23 +267,19 @@ def scan_sources(pargs:object, db:object) -> Dict[str, List[tuple]]:
                     if pargs.dir else 
                 gkf.listify(os.path.expanduser('~')) )
 
-    oed = collections.defaultdict(list)
+    oed = UltraDict()
     try:
         for folder in [ os.path.expanduser(os.path.expandvars(_)) 
                 for _ in folders if _ ]:
-            f_data = scan_source(
-                        folder, db, pargs.small_file, pargs.exclude,
-                        pargs.follow, pargs.quiet, pargs.verbose
-                        )
-            for k in f_data:
-                if k not in oed:
-                    oed[k] = f_data[k]
-                else:
-                    oed[k].extend(f_data[k])
+            if '/.' in folder and not pargs.include_hidden: continue
+            oed << scan_source(folder, pargs, db)
  
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
         pass
+
+    except Exception as e:
+        gkf.tombstone('major problem. {}'.format(e))
 
     if pargs.verbose: pprint.pprint(oed)
     return oed
@@ -289,6 +317,9 @@ def undeux_main() -> int:
 
     parser.add_argument('--ignore-extensions', action='store_true',
         help="do not consider extension when comparing files.")
+
+    parser.add_argument('--include-hidden', action='store_true',
+        help="search hidden directories as well.")
 
     parser.add_argument('--link-dir', type=str, 
         help="if present, we will create symlinks to the older files in this dir.")
@@ -354,8 +385,41 @@ def undeux_main() -> int:
     # Always be nice.
     os.nice(pargs.nice)
 
-    return report(scan_sources(pargs, db), pargs)
+    file_info = scan_sources(pargs, db)
+    hashes = collections.defaultdict(list)
 
+    if k, v in file_info:
+        try:
+            if len(v) == 1: continue
+
+            # Finally, things get interesting.
+            for t in v:
+                try:
+                    f = fname.Fname(t[0])
+                    hashes[k].append((f.hash, str(f))
+                except FileNotFoundError as e:
+                    pass
+                except Exception as e:
+                    raise OuterBlock()
+
+        except OuterBlock as e:
+            continue
+    
+    for _, similar_files in hashes:
+        similar_files = sorted(similar_files)
+        first_hash, first_file = similar_files[0]
+        clones = [first_file]
+        for h, f in similar_files[1:]:
+            if h == first_hash:
+                clones.append[f]
+                continue
+            else:
+                first_hash, first_file = h, f
+                clones = [f]
+
+        
+        
+                            
 
 if __name__ == '__main__':
     if not os.getuid(): 
@@ -365,3 +429,9 @@ if __name__ == '__main__':
     sys.exit(undeux_main())
 else:
     pass
+
+
+
+
+
+
