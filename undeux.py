@@ -53,9 +53,9 @@ schema = [
     ]
 
 # Exception for getting out of a nested for-block.
-class OuterBlock:
+class OuterBlock(Exception):
     def __init__(self) -> None:
-        pass
+        Exception.__init__(self)
 
 
 class DeDupDB(sqlitedb.SQLiteDB):
@@ -93,6 +93,8 @@ class DeDupDB(sqlitedb.SQLiteDB):
 
 
 
+class UltraDict:
+    pass
 
 class UltraDict(collections.defaultdict):
     """
@@ -197,7 +199,7 @@ def scan_source(src:str,
     exclude = gkf.listify(pargs.exclude)
     start_time = time.time()
 
-    for root_dir, folders, files in os.walk(src, followlinks=follow_links):
+    for root_dir, folders, files in os.walk(src, followlinks=pargs.follow_links):
         if '/.' in root_dir and not pargs.include_hidden: continue
         gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
 
@@ -211,22 +213,22 @@ def scan_source(src:str,
                 data = stat_function(k)
             except PermissionError as e: 
                 # cannot stat it.
-                if verbose: print("!perms {}".format(k))
+                if pargs.verbose: print("!perms {}".format(k))
                 continue
 
             if data.st_uid * data.st_gid == 0: 
                 # belongs to root in some way.
-                if verbose: print("!oroot {}".format(k))
+                if pargs.verbose: print("!oroot {}".format(k))
                 continue 
 
-            if data.st_size < bigger_than:     
+            if data.st_size < pargs.small_file:     
                 # small file; why worry?
-                if verbose: print("!small {}".format(k))
+                if pargs.verbose: print("!small {}".format(k))
                 continue
 
             if data.st_uid != my_uid:
                 # Not even my file.
-                if verbose: print("!del   {}".format(k))
+                if pargs.verbose: print("!del   {}".format(k))
                 continue  # cannot remove it.
 
             # This manoeuvre lets us read the contents and determine
@@ -242,9 +244,9 @@ def scan_source(src:str,
                 start_time - data.st_ctime 
                 ]
 
-            stats.append(scorer(data.st_size, stats[5], stats[3], stats[4]))
+            # stats.append(scorer(data.st_size, stats[], stats[3], stats[4]))
             websters[data.st_size].append(stats)
-            if verbose: print("{}".format(stats))
+            if pargs.verbose: print("{}".format(stats))
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
@@ -280,6 +282,7 @@ def scan_sources(pargs:object, db:object) -> Dict[int, List[tuple]]:
 
     except Exception as e:
         gkf.tombstone('major problem. {}'.format(e))
+        print(gkf.formatted_stack_trace())
 
     if pargs.verbose: pprint.pprint(oed)
     return oed
@@ -312,7 +315,7 @@ def undeux_main() -> int:
         choices=('csv', 'pack', 'msgpack', None),
         help="if present, export the database in this format.")
 
-    parser.add_argument('--follow', action='store_true',
+    parser.add_argument('--follow-links', action='store_true',
         help="follow symbolic links -- default is not to.")
 
     parser.add_argument('--ignore-extensions', action='store_true',
@@ -376,19 +379,20 @@ def undeux_main() -> int:
         pargs.db = os.path.join(pargs.output, 'undeux.db')
 
     gkf.make_dir_or_die(pargs.output)
-    if pargs.new:
-        db = DeDupDB(pargs.db, pargs.new, schema)
-    else:
-        db = DeDupDB(pargs.db)
-    if not db: return os.EX_DATAERR
+    # if pargs.new:
+    #    db = DeDupDB(pargs.db, pargs.new, schema)
+    # else:
+    #    db = DeDupDB(pargs.db)
+    # if not db: return os.EX_DATAERR
 
     # Always be nice.
     os.nice(pargs.nice)
 
-    file_info = scan_sources(pargs, db)
+    file_info = scan_sources(pargs, None)
     hashes = collections.defaultdict(list)
 
-    if k, v in file_info:
+    print("examining {} items".format(len(file_info)))
+    for k, v in file_info.items():
         try:
             if len(v) == 1: continue
 
@@ -396,7 +400,8 @@ def undeux_main() -> int:
             for t in v:
                 try:
                     f = fname.Fname(t[0])
-                    hashes[k].append((f.hash, str(f))
+                    print("hashing {}".format(str(f)))
+                    hashes[f.hash].append(str(f))
                 except FileNotFoundError as e:
                     pass
                 except Exception as e:
@@ -405,18 +410,8 @@ def undeux_main() -> int:
         except OuterBlock as e:
             continue
     
-    for _, similar_files in hashes:
-        similar_files = sorted(similar_files)
-        first_hash, first_file = similar_files[0]
-        clones = [first_file]
-        for h, f in similar_files[1:]:
-            if h == first_hash:
-                clones.append[f]
-                continue
-            else:
-                first_hash, first_file = h, f
-                clones = [f]
-
+    for i, v in hashes.items():
+        print("{}: {}".format(i, v[1]))
         
         
                             
