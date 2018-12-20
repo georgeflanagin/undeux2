@@ -123,7 +123,7 @@ def report(d:dict, pargs:object) -> int:
     duplicates = []
     gkf.tombstone('reporting.')
     with_dups = {k:v for k, v in d.items() if len(v) > 1}
-    unique_files = {k:v for k, v in d.items() if len(v) == 1}
+    # unique_files = {k:v for k, v in d.items() if len(v) == 1}
     for k, v in with_dups.items():
         for vv in v:
             duplicates.append((k, vv))
@@ -394,6 +394,8 @@ def undeux_main() -> int:
     print("examining {} items".format(len(file_info)))
     for k, v in file_info.items():
         try:
+            # If there is only one file this size on the system, then
+            # it must be unique.
             if len(v) == 1: continue
 
             # Finally, things get interesting.
@@ -411,7 +413,7 @@ def undeux_main() -> int:
             continue
     
     for i, v in hashes.items():
-        print("{}: {}".format(i, v[1]))
+        print("{}: {}".format(i, v))
         
         
                             
