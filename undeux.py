@@ -57,43 +57,8 @@ class OuterBlock(Exception):
         Exception.__init__(self)
 
 
-class DeDupDB(sqlitedb.SQLiteDB):
-    def __init__(self, path_to_db:str, force_new_db:bool = False, extra_DDL:list=[]):
-        sqlitedb.SQLiteDB.__init__(self, path_to_db, force_new_db, extra_DDL)
-
-    def add_file_details(self, fileinfo:List[tuple]) -> bool:
-        """
-        Populate the filelist. Returns whether all the info was added.
-            stats = [ str(F), F.hash, data.st_size, 
-                start_time - data.st_mtime, 
-                start_time - data.st_atime, 
-                start_time - data.st_ctime ]
-            oed[k] = tuple(stats.append(score(stats)))
-        """
-
-        SQL = """insert into filelist values (?, ?, ?, ?, ?, ?, ?)"""
-        fileinfo = gkf.listify(fileinfo)
-
-        i = 0
-        if len(fileinfo) > 100: self._keys_off()
-        try:
-            for i, rec in enumerate(fileinfo): 
-                try:
-                    self.cursor.execute(SQL, rec)   
-                except Exception as e:
-                    print("{}".format(str(e), rec))
-                    sys.exit(os.EX_DATAERR)
-
-        finally:
-            self.db.commit()    
-            if len(fileinfo) > 100: self._keys_on()
-
-        return i == len(fileinfo)
-
-
-
-class UltraDict:
-    pass
+# The Guido hack (which we will not need in 3.8!)
+class UltraDict: pass
 
 class UltraDict(collections.defaultdict):
     """
@@ -115,56 +80,7 @@ class UltraDict(collections.defaultdict):
         return self
 
 
-def report(d:dict, pargs:object) -> int:
-    """
-    report the worst offenders.
-    """
-    duplicates = []
-    gkf.tombstone('reporting.')
-    with_dups = {k:v for k, v in d.items() if len(v) > 1}
-    # unique_files = {k:v for k, v in d.items() if len(v) == 1}
-    for k, v in with_dups.items():
-        for vv in v:
-            duplicates.append((k, vv))
-        
-    if not with_dups: 
-        print("No duplicates found. Nothing to report.")
-        return 0
-
-    destination_dir = pargs.output
-    report_file = "{}{}{}{}{}{}".format(destination_dir, os.sep, 
-            'undeux.', gkf.now_as_string('-'), ".", pargs.export)
-
-    # Write the data.
-    with open(report_file, 'w+') as f:
-        if pargs.export == 'csv':
-            csvfile = csv.writer(f)
-            for row in duplicates:
-                csvfile.writerow(row)
-        else:
-            f.write(msgpack.packb(with_dups, use_bin_type=True))
-        gkf.tombstone('report complete. ' + str(len(duplicates)) + ' rows written.')
-
-    if pargs.link_dir: 
-        gkf.make_dir_or_die(pargs.link_dir)
-        for i, dup in enumerate(duplicates):
-            f = str(fname.Fname(dup[1][0]))
-            link_name = os.path.join(pargs.link_dir,str(i))
-            try:
-                os.unlink(link_name)
-            except FileNotFoundError as e:
-                pass
-            finally:
-                os.symlink(f, link_name)
-
-        gkf.tombstone('links created.')
-
-    return os.EX_OK
-
-
-def scan_source(src:str,
-                pargs:object,
-                db:object) -> Dict[int, list]:
+def scan_source(src:str, pargs:object) -> Dict[int, list]:
 
     """
                 bigger_than:int,
@@ -178,12 +94,18 @@ def scan_source(src:str,
     the small files, and anything we cannot stat.
 
     src -- name of a directory to scan
-    follow_links -- if true, we don't treat links as links. Instead
-        we scan the item pointed to by the link.
+
+    pargs -- all the options. Of interest to us are:
+
+        .exclude -- skip anything that matches anything in this list.
+        .follow_links -- generally, we don't.
+        .include_hidden -- should be bother with hidden directories.
+        .small_file -- anything smaller is ignored.
+        .young_file -- if a file is newer than this value, we ignore it.
     
-    returns -- a dict, keyed on the hash, and with a list of info about 
+    returns -- a dict, keyed on the size, and with a list of info about 
         the matching files as the value, each element of the list being
-        a tuple.
+        a tuple of info.
     """
     global scorer
 
@@ -206,29 +128,36 @@ def scan_source(src:str,
 
             stats = []
             k = os.path.join(root_dir, f)
-            if any(ex in k for ex in exclude): continue
+            if any(ex in k for ex in exclude): 
+                if pargs.verbose: print("!xclud! {}".format(k))
+                continue
 
             try:
                 data = stat_function(k)
             except PermissionError as e: 
                 # cannot stat it.
-                if pargs.verbose: print("!perms {}".format(k))
+                if pargs.verbose: print("!perms! {}".format(k))
                 continue
 
             if data.st_uid * data.st_gid == 0: 
                 # belongs to root in some way.
-                if pargs.verbose: print("!oroot {}".format(k))
+                if pargs.verbose: print("!oroot! {}".format(k))
                 continue 
 
             if data.st_size < pargs.small_file:     
                 # small file; why worry?
-                if pargs.verbose: print("!small {}".format(k))
+                if pargs.verbose: print("!small! {}".format(k))
                 continue
 
             if data.st_uid != my_uid:
                 # Not even my file.
-                if pargs.verbose: print("!del   {}".format(k))
+                if pargs.verbose: print("!del  ! {}".format(k))
                 continue  # cannot remove it.
+
+            if start_time - data.st_ctime < pargs.young_file:
+                # If it is new, we must need it.
+                if pargs.verbose: print("!young! {}".format(k))
+                continue
 
             # This manoeuvre lets us read the contents and determine
             # the hash.
@@ -255,9 +184,11 @@ def scan_source(src:str,
     return websters
 
 
-def scan_sources(pargs:object, db:object) -> Dict[int, List[tuple]]:
+def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
     """
     Perform the scan using the rules and places provided by the user.
+    This is the spot where we decide what to scan. The called routine,
+    scan_source() should bin
 
     pargs -- The Namespace created by parsing command line options,
         but it could be any Namespace.
@@ -272,8 +203,10 @@ def scan_sources(pargs:object, db:object) -> Dict[int, List[tuple]]:
     try:
         for folder in [ os.path.expanduser(os.path.expandvars(_)) 
                 for _ in folders if _ ]:
-            if '/.' in folder and not pargs.include_hidden: continue
-            oed << scan_source(folder, pargs, db)
+            if '/.' in folder and not pargs.include_hidden: 
+                print('skipping {}'.format(folder))
+                continue
+            oed << scan_source(folder, pargs)
  
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')

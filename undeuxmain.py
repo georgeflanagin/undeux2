@@ -52,9 +52,6 @@ def undeux_main() -> int:
 
     parser.add_argument('-?', '--explain', action='store_true')
 
-    parser.add_argument('--db', type=str, default=None,
-        help="location of SQLite database of hashes.")
-
     parser.add_argument('--dir', action='append', 
         help="directory to investigate (if not your home dir)")
 
@@ -63,13 +60,10 @@ def undeux_main() -> int:
 
     parser.add_argument('--export', type=str, default='csv',
         choices=('csv', 'pack', 'msgpack', None),
-        help="if present, export the database in this format.")
+        help="if present, export the results in this format.")
 
     parser.add_argument('--follow-links', action='store_true',
         help="follow symbolic links -- default is not to.")
-
-    parser.add_argument('--ignore-extensions', action='store_true',
-        help="do not consider extension when comparing files.")
 
     parser.add_argument('--include-hidden', action='store_true',
         help="search hidden directories as well.")
@@ -79,9 +73,6 @@ def undeux_main() -> int:
 
     parser.add_argument('--just-do-it', action='store_true',
         help="run the program using the defaults.")
-
-    parser.add_argument('--new', action='store_true', 
-        help="create a new database, even if it already exists.")
 
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
@@ -125,8 +116,6 @@ def undeux_main() -> int:
         print('UnDeux (c) 2019. George Flanagin and Associates.')
         print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
         return os.EX_OK
-    if not pargs.db: 
-        pargs.db = os.path.join(pargs.output, 'undeux.db')
 
     gkf.make_dir_or_die(pargs.output)
     # if pargs.new:
@@ -138,7 +127,7 @@ def undeux_main() -> int:
     # Always be nice.
     os.nice(pargs.nice)
 
-    file_info = undeux.scan_sources(pargs, None)
+    file_info = undeux.scan_sources(pargs)
     hashes = collections.defaultdict(list)
 
     print("examining {} items".format(len(file_info)))
