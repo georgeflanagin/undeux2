@@ -41,20 +41,15 @@ def undeux_help() -> int:
     To elaborate:
 
     - Files that you cannot remove are given a zero, and not further
-        incorporated into the removal logic.
-    - Files are penalized for not having been accesses in a long time.
-    - Files with the same name as a newer file, are penalized.
-    - Files with the same name as a newer file, and that have at least
-        one common ancestor directory are penalized even more.
+        incorporated into the removal logic. The same is true of a file
+        that is too new, or too small.
+    - Files are penalized for not having been accessed in a long time.
+    - Files that are large are penalized.
     - Files are penalized if their contents exactly match another
         file. This is the final step. There is no need to compare every
         file because if two files have different lengths, they 
         are obviously not the same file.
     
-    Users of LaTeX may note that this is the same logic used to determine
-    page breaks, namely that all page breaks are ugly, and we choose
-    the least ugly according to the rules. 
-
     So if you have an ancient file, that is a duplicate of some other
     file, with the same name, somewhere on the same mount point, and it 
     is large and hasn't been accessed in a while, then its score
@@ -75,17 +70,6 @@ def undeux_help() -> int:
 
     -? / --help / --explain :: This is it; you are here. There is no
         more.
-
-    --db
-        Name of a database file to contain the results, and/or the
-        database containing [partial] results from previous runs. By
-        default, the database is created as undeux.db in the directory
-        named by the --output switch.
-
-        At the conclusion of the run, the database is optionally 
-        exported to a CSV file named undeux.YYYY-MM-DD-HH-MM.csv 
-        or a file named undeux.YYYY-MM-DD-HH-MM.msgpack depending
-        on the value of --export.     
 
     --dir {dir-name} [--dir {dir-name} .. ]
         This is an optional parameter to name several directories,
@@ -114,14 +98,6 @@ def undeux_help() -> int:
         mentioned by symbolic links that are *also* in your 
         directory of interest.
 
-    --ignore-extensions
-        This option is useful with media files where there may be
-        `.jpg` and `.JPG` and `.jpeg` files all mixed together. By 
-        default, --ignore-extensions is *OFF*. If this switch is
-        engaged, then x.jpg, x.JPG, and x.JpEg will all be considered
-        to be the same file name, possibly interfering with each 
-        other.
-
     --just-do-it
         Accept all defaults, and run the program.  
 
@@ -130,9 +106,6 @@ def undeux_help() -> int:
         with `--output` will contain a directory named 'links' that
         will have symbolic links to all the duplicate files. This 
         feature is for convenience in their removal.
-
-    --new
-        Force the creation of a new database if it exists.
 
     --nice {int} 
         Keep in mind a terabyte of disc could hold one million files 
