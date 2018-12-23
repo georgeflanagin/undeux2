@@ -128,7 +128,7 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
 
             stats = []
             k = os.path.join(root_dir, f)
-            if any(ex in k for ex in exclude): 
+            if any(ex in k for ex in pargs.exclude): 
                 if pargs.verbose: print("!xclud! {}".format(k))
                 continue
 
@@ -206,6 +206,10 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
             if '/.' in folder and not pargs.include_hidden: 
                 print('skipping {}'.format(folder))
                 continue
+            if any(ex in folder for ex in pargs.exclude): 
+                print('excluded {} skipped.'.format(folder))
+                continue
+
             oed << scan_source(folder, pargs)
  
     except KeyboardInterrupt as e:
