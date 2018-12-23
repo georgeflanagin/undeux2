@@ -136,12 +136,12 @@ def undeux_main() -> int:
             # If there is only one file this size on the system, then
             # it must be unique.
             if len(v) == 1: continue
+            print("checking possible duplicates matching {}".format(k))
 
             # Finally, things get interesting.
             for t in v:
                 try:
                     f = fname.Fname(t[0])
-                    print("hashing {}".format(str(f)))
                     hashes[f.hash].append(str(f))
                 except FileNotFoundError as e:
                     pass
