@@ -152,10 +152,9 @@ def undeux_main() -> int:
             continue
     
     for i, v in hashes.items():
-        print("{}: {}".format(i, v))
+        if len(v) > 1:
+            print("{}: {}".format(i, v))
         
-        
-                            
 
 if __name__ == '__main__':
     if not os.getuid(): 
