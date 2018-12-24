@@ -23,7 +23,6 @@ from   datetime import datetime
 from   functools import reduce
 import hashlib
 import math
-import msgpack
 import operator
 import os
 import pprint

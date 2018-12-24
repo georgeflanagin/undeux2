@@ -23,7 +23,6 @@ from   datetime import datetime
 from   functools import reduce
 import hashlib
 import math
-import msgpack
 import operator
 import os
 import pprint
@@ -136,13 +135,13 @@ def undeux_main() -> int:
             # If there is only one file this size on the system, then
             # it must be unique.
             if len(v) == 1: continue
-            print("checking possible duplicates matching {}".format(k))
+            print("checking {} possible duplicates matching {}".format(len(v), k))
 
             # Finally, things get interesting.
             for t in v:
                 try:
                     f = fname.Fname(t[0])
-                    hashes[f.hash].append(str(f))
+                    hashes[f.hash].append((str(f), len(f)))
                 except FileNotFoundError as e:
                     pass
                 except Exception as e:
@@ -151,9 +150,13 @@ def undeux_main() -> int:
         except OuterBlock as e:
             continue
     
+    print(80*"=")
+    print("{} duplicated files found".format(len(hashes)))
     for i, v in hashes.items():
-        if len(v) > 1:
-            print("{}: {}".format(i, v))
+        target = v[0][1]
+        if len(v) == 1: continue
+        print("{}:{} -> {}".format(target, i, v))
+    print(80*"=")
         
 
 if __name__ == '__main__':
