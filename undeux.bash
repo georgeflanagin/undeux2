@@ -9,7 +9,7 @@ undeux()
 
     py=`which python`
     d=`find ~ -name undeux -type d | head -1`    
-    "$py $d/undeuxmain.py $@"
+    "$py $d/undeux.py $@"
 }
 
 addhere()

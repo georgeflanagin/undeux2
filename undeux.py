@@ -18,6 +18,7 @@ from   typing import *
 import argparse
 import cmd
 import collections
+import contextlib
 import csv
 from   datetime import datetime
 from   functools import reduce
@@ -34,191 +35,182 @@ import fname
 import gkflib as gkf
 from   help import undeux_help
 import score
-import sqlitedb
-
-scorer = score.Scorer()
-
-schema = [
-    """CREATE TABLE filelist ( 
-    filename VARCHAR(1000) NOT NULL
-    ,content_hash CHAR(32) NOT NULL
-    ,size INTEGER
-    ,modify_age float NOT NULL
-    ,access_age float NOT NULL
-    ,create_age float NOT NULL
-    ,score float DEFAULT 0
-    )"""
-    ]
-
-# Exception for getting out of a nested for-block.
-class OuterBlock(Exception):
-    def __init__(self) -> None:
-        Exception.__init__(self)
+import undeuxlib
 
 
-# The Guido hack (which we will not need in 3.8!)
-class UltraDict: pass
-
-class UltraDict(collections.defaultdict):
+def undeux_main() -> int:
     """
-    An UltraDict is a defaultdict with list values that are
-    automagically created or appended when we do the ultramerge
-    operation represented by the << operator.
+    This function loads the arguments, creates the console,
+    and runs the program. IOW, this is it.
     """
-    def __init__(self) -> None:
-        collections.defaultdict.__init__(self, list)
+    global schema
 
+    # If someone has supplied no arguments, then show the help.
+    if len(sys.argv)==1: return undeux_help()
 
-    def __lshift__(self, info:collections.defaultdict) -> UltraDict:
-        for k, v in info.items():
-            if k in self:
-                self[k].extend(info[k])
-            else:
-                self[k] = info[k]
+    parser = argparse.ArgumentParser(description='Find probable duplicate files.')
 
-        return self
+    parser.add_argument('-?', '--explain', action='store_true')
 
+    parser.add_argument('--dir', action='append', 
+        help="directory to investigate (if not your home dir)")
 
-def scan_source(src:str, pargs:object) -> Dict[int, list]:
+    parser.add_argument('-x', '--exclude', action='append', default=[],
+        help="one or more directories to ignore. Defaults to exclude hidden dirs.")
 
-    """
-                bigger_than:int,
-                exclude:list=[],
-                follow_links:bool=False, 
-                quiet:bool=False,
-                verbose:bool=False) -> Dict[int, list]:
+    parser.add_argument('--export', type=str, default='csv',
+        choices=('csv', 'pack', 'msgpack', None),
+        help="if present, export the results in this format.")
 
-    Build the list of files and their relevant data from os.stat.
-    Note that we skip files that we cannot write to (i.e., delete),
-    the small files, and anything we cannot stat.
+    parser.add_argument('--follow-links', action='store_true',
+        help="follow symbolic links -- default is not to.")
 
-    src -- name of a directory to scan
+    parser.add_argument('--include-hidden', action='store_true',
+        help="search hidden directories as well.")
 
-    pargs -- all the options. Of interest to us are:
+    parser.add_argument('--link-dir', type=str, 
+        help="if present, we will create symlinks to the older files in this dir.")
 
-        .exclude -- skip anything that matches anything in this list.
-        .follow_links -- generally, we don't.
-        .include_hidden -- should be bother with hidden directories.
-        .small_file -- anything smaller is ignored.
-        .young_file -- if a file is newer than this value, we ignore it.
+    parser.add_argument('--just-do-it', action='store_true',
+        help="run the program using the defaults.")
+
+    parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
+        help="by default, this program runs /very/ nicely at nice=20")
+
+    parser.add_argument('--output', type=str, default='.',
+        help="where to write the log file. The default is $PWD.")
+
+    parser.add_argument('--quiet', action='store_true',
+        help="eliminates narrative while running.")
+
+    parser.add_argument('--small-file', type=int, default=4096,
+        help="files less than this size (default 4096) are not evaluated.")
+
+    parser.add_argument('--verbose', action='store_true',
+        help="go into way too much detail.")
+
+    parser.add_argument('--version', action='store_true')
+
+    parser.add_argument('--young-file', type=int, default=30,
+        help="default is 30 days. You are clearly using it.")
+
+    pargs = parser.parse_args()
+    gkf.show_args(pargs)
+
+    # We need to fix up a couple of the arguments. Let's convert the
+    # youth designation from days to seconds.
+    pargs.young_file = pargs.young_file * 60 * 60 * 24
     
-    returns -- a dict, keyed on the size, and with a list of info about 
-        the matching files as the value, each element of the list being
-        a tuple of info.
-    """
-    global scorer
+    # And let's take care of env vars and other symbols in dir names. Be
+    # sure to eliminate duplicates.
+    pargs.output = str(fname.Fname(pargs.output))
+    if not pargs.dir: pargs.dir = ['.']
+    pargs.dir = list(set([ str(fname.Fname(_)) for _ in pargs.dir]))
+    pargs.exclude = list(set(pargs.exclude))
 
-    # This call helps us determine which files are ours.
-    my_name, my_uid = gkf.me()
+    print("arguments after translation:")
+    gkf.show_args(pargs)
 
-    # Two different approaches, depending on whether we are following
-    # symbolic links.
-    stat_function = os.stat if pargs.follow_links else os.lstat
-    websters = collections.defaultdict(list)
+    if pargs.explain: return undeux_help()
+    if pargs.version:
+        print('UnDeux (c) 2019. George Flanagin and Associates.')
+        print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
+        return os.EX_OK
 
-    exclude = gkf.listify(pargs.exclude)
-    start_time = time.time()
+    if not pargs.just_do_it:
+        r = input('\nDoes this look right to you? ')
+        if r.lower() not in "yes": sys.exit(os.EX_OK)
 
-    for root_dir, folders, files in os.walk(src, followlinks=pargs.follow_links):
-        if '/.' in root_dir and not pargs.include_hidden: continue
-        gkf.tombstone('scanning {} files in {}'.format(len(files), root_dir))
+    with contextlib.redirect_stdout(sys.stderr):
+        gkf.make_dir_or_die(pargs.output)
+        # if pargs.new:
+        #    db = DeDupDB(pargs.db, pargs.new, schema)
+        # else:
+        #    db = DeDupDB(pargs.db)
+        # if not db: return os.EX_DATAERR
 
-        for f in files:
+        # Always be nice.
+        os.nice(pargs.nice)
 
-            stats = []
-            k = os.path.join(root_dir, f)
-            if any(ex in k for ex in pargs.exclude): 
-                if pargs.verbose: print("!xclud! {}".format(k))
-                continue
+        file_info = undeuxlib.scan_sources(pargs)
+        number_scanned = len(file_info)
+        hashes = collections.defaultdict(list)
 
-            try:
-                data = stat_function(k)
-            except PermissionError as e: 
-                # cannot stat it.
-                if pargs.verbose: print("!perms! {}".format(k))
-                continue
+        print("examining {} items".format(len(file_info)))
+        scorer = score.Scorer()
+        now = time.time()
 
-            if data.st_uid * data.st_gid == 0: 
-                # belongs to root in some way.
-                if pargs.verbose: print("!oroot! {}".format(k))
-                continue 
+        try:
+            for k, v in file_info.items():
+                try:
+                    # If there is only one file this size on the system, then
+                    # it must be unique.
+                    if len(v) == 1: continue
 
-            if data.st_size < pargs.small_file:     
-                # small file; why worry?
-                if pargs.verbose: print("!small! {}".format(k))
-                continue
+                    # Finally, things get interesting.
+                    print("checking {} possible duplicates matching {}".format(len(v), k))
+                    for t in v:
+                        try:
+                            f = fname.Fname(t[0])
+                            stats = os.stat(str(f))
+                            my_stats = [stats.st_size,
+                                int(now-stats.st_ctime), 
+                                int(now-stats.st_mtime), 
+                                int(now-stats.st_atime + 1)]
 
-            if data.st_uid != my_uid:
-                # Not even my file.
-                if pargs.verbose: print("!del  ! {}".format(k))
-                continue  # cannot remove it.
+                            ugliness = scorer(*my_stats)
+                            hashes[f.hash].append((ugliness, str(f), my_stats))
 
-            if start_time - data.st_ctime < pargs.young_file:
-                # If it is new, we must need it.
-                if pargs.verbose: print("!young! {}".format(k))
-                continue
+                        except FileNotFoundError as e:
+                            # It got deleted while we were working. No big deal.
+                            pass
 
-            # This manoeuvre lets us read the contents and determine
-            # the hash.
-            F = fname.Fname(k)
-            
-            # Note that this operation changes the times to "seconds ago"
-            # from the start time of the scanning. 
-            stats = [ 
-                str(F),
-                start_time - data.st_mtime, 
-                start_time - data.st_atime, 
-                start_time - data.st_ctime 
-                ]
+                        except Exception as e:
+                            # something uncorrectable happened, but let's not bail out.
+                            gkf.tombstone(str(e))
+                            raise OuterBlock()
 
-            # stats.append(scorer(data.st_size, stats[], stats[3], stats[4]))
-            websters[data.st_size].append(stats)
-            if pargs.verbose: print("{}".format(stats))
+                except OuterBlock as e:
+                    continue
+        except KeyError as e:
+            # we are finished.
+            pass
+        
 
-    stop_time = time.time()
-    elapsed_time = str(round(stop_time-start_time, 3))
-    num_files = str(len(websters))
-    gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
-    
-    return websters
+        duplicate_files = 0
+        print(80*"=")
+        try:
+            for i, file_info in hashes.items():
+                if len(file_info) == 1: continue
+                duplicate_files += 1
+
+                # Sort by ugliness, most ugly first.
+                v = sorted(file_info, reverse=True)
+                target = v[0][1]
+                if pargs.verbose: print("{} -> {}".format(target, i, v))
+                else: 
+                    for vv in v:
+                        print("{}".format(vv))
+                    print(80*'-')
+
+        except KeyError as e:
+            # we are finished.
+            print("{} duplicate files.".format(duplicate_files))
+
+        print(80*"=")
+        
+
+if __name__ == '__main__':
+    if not os.getuid(): 
+        print('You cannot run this program as root.')
+        sys.exit(os.EX_CONFIG)
+
+    sys.exit(undeux_main())
+else:
+    pass
 
 
-def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
-    """
-    Perform the scan using the rules and places provided by the user.
-    This is the spot where we decide what to scan. The called routine,
-    scan_source() should bin
 
-    pargs -- The Namespace created by parsing command line options,
-        but it could be any Namespace.
 
-    returns -- a dict of filenames and stats.
-    """
-    folders = ( gkf.listify(pargs.dir) 
-                    if pargs.dir else 
-                gkf.listify(os.path.expanduser('~')) )
 
-    oed = UltraDict()
-    try:
-        for folder in [ os.path.expanduser(os.path.expandvars(_)) 
-                for _ in folders if _ ]:
-            if '/.' in folder and not pargs.include_hidden: 
-                print('skipping {}'.format(folder))
-                continue
-            if any(ex in folder for ex in pargs.exclude): 
-                print('excluded {} skipped.'.format(folder))
-                continue
-
-            oed << scan_source(folder, pargs)
- 
-    except KeyboardInterrupt as e:
-        gkf.tombstone('interrupted by cntl-C')
-        pass
-
-    except Exception as e:
-        gkf.tombstone('major problem. {}'.format(e))
-        print(gkf.formatted_stack_trace())
-
-    if pargs.verbose: pprint.pprint(oed)
-    return oed
 
