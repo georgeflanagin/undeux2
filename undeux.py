@@ -19,15 +19,11 @@ import argparse
 import cmd
 import collections
 import contextlib
-import csv
 from   datetime import datetime
-from   functools import reduce
-import hashlib
 import math
 import operator
 import os
 import pprint
-import sqlite3
 import sys
 import time
 
@@ -36,7 +32,6 @@ import gkflib as gkf
 from   help import undeux_help
 import score
 import undeuxlib
-
 
 def undeux_main() -> int:
     """
@@ -121,13 +116,9 @@ def undeux_main() -> int:
         r = input('\nDoes this look right to you? ')
         if r.lower() not in "yes": sys.exit(os.EX_OK)
 
+    summary = {}
+
     with contextlib.redirect_stdout(sys.stderr):
-        gkf.make_dir_or_die(pargs.output)
-        # if pargs.new:
-        #    db = DeDupDB(pargs.db, pargs.new, schema)
-        # else:
-        #    db = DeDupDB(pargs.db)
-        # if not db: return os.EX_DATAERR
 
         # Always be nice.
         os.nice(pargs.nice)
@@ -136,6 +127,8 @@ def undeux_main() -> int:
         number_scanned = len(file_info)
         hashes = collections.defaultdict(list)
 
+        summary['total_files'] = len(file_info)
+        summary['unique_sizes'] = 0
         print("examining {} items".format(len(file_info)))
         scorer = score.Scorer()
         now = time.time()
@@ -145,10 +138,13 @@ def undeux_main() -> int:
                 try:
                     # If there is only one file this size on the system, then
                     # it must be unique.
-                    if len(v) == 1: continue
+                    if len(v) == 1: 
+                        summary['unique_sizes'] += 1
+                        continue
 
                     # Finally, things get interesting.
-                    print("checking {} possible duplicates matching {}".format(len(v), k))
+                    if not pargs.quiet: 
+                        print("checking {} possible duplicates matching {}".format(len(v), k))
                     for t in v:
                         try:
                             f = fname.Fname(t[0])
@@ -176,22 +172,21 @@ def undeux_main() -> int:
             # we are finished.
             pass
         
-
-        duplicate_files = 0
+        summary['num_hashes'] = len(hashes)
+        summary['duplicate_files'] = 0
         print(80*"=")
         try:
             for i, file_info in hashes.items():
                 if len(file_info) == 1: continue
-                duplicate_files += 1
+                summary['duplicate_files'] += 1
 
                 # Sort by ugliness, most ugly first.
                 v = sorted(file_info, reverse=True)
                 target = v[0][1]
                 if pargs.verbose: print("{} -> {}".format(target, i, v))
-                else: 
-                    for vv in v:
-                        print("{}".format(vv))
-                    print(80*'-')
+                for vv in v:
+                    print("{}".format(vv))
+                print(80*'-')
 
         except KeyError as e:
             # we are finished.
