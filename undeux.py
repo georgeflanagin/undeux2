@@ -21,7 +21,6 @@ import collections
 import contextlib
 from   datetime import datetime
 import math
-import operator
 import os
 import pprint
 import sys
@@ -35,10 +34,9 @@ import undeuxlib
 
 def undeux_main() -> int:
     """
-    This function loads the arguments, creates the console,
+    This function loads the arguments, creates the console output,
     and runs the program. IOW, this is it.
     """
-    global schema
 
     # If someone has supplied no arguments, then show the help.
     if len(sys.argv)==1: return undeux_help()
@@ -84,12 +82,14 @@ def undeux_main() -> int:
     parser.add_argument('--verbose', action='store_true',
         help="go into way too much detail.")
 
-    parser.add_argument('--version', action='store_true')
+    parser.add_argument('--version', action='store_true', 
+        help='Print the version and exit.')
 
     parser.add_argument('--young-file', type=int, default=30,
         help="default is 30 days. You are clearly using it.")
 
     pargs = parser.parse_args()
+    if pargs.explain: return undeux_help()
     gkf.show_args(pargs)
 
     # We need to fix up a couple of the arguments. Let's convert the
@@ -106,7 +106,6 @@ def undeux_main() -> int:
     print("arguments after translation:")
     gkf.show_args(pargs)
 
-    if pargs.explain: return undeux_help()
     if pargs.version:
         print('UnDeux (c) 2019. George Flanagin and Associates.')
         print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
@@ -116,34 +115,43 @@ def undeux_main() -> int:
         r = input('\nDoes this look right to you? ')
         if r.lower() not in "yes": sys.exit(os.EX_OK)
 
-    summary = {}
+    # OK, we have the green light.
+    # Always be nice.
+    os.nice(pargs.nice)
+
+    summary = gkf.sloppy(dict.fromkeys([
+        'total_files', 'unique_sizes', 
+        'hashed_files', 'duplicated_files', 
+        'wasted_space', 'biggest_waste'], 0))
 
     with contextlib.redirect_stdout(sys.stderr):
-
-        # Always be nice.
-        os.nice(pargs.nice)
-
+        # This function takes a while to execute. :-)
         file_info = undeuxlib.scan_sources(pargs)
-        number_scanned = len(file_info)
-        hashes = collections.defaultdict(list)
+        summary.total_files = len(file_info)
 
-        summary['total_files'] = len(file_info)
-        summary['unique_sizes'] = 0
-        print("examining {} items".format(len(file_info)))
+        hashes = collections.defaultdict(list)
+        print("examining {} items".format(summary.total_files))
+
+        # NOTE: if you want to change the way the scoring operates,
+        # this is the place to do it. The Scorer.__init__ function
+        # takes keyword parameters to alter its operation.
         scorer = score.Scorer()
         now = time.time()
 
-        try:
-            for k, v in file_info.items():
+        while True:
+            try:
+                # This data structure is huge, so let's shrink it as
+                # we go.
+                k, v = file_info.popitem()
                 try:
                     # If there is only one file this size on the system, then
                     # it must be unique.
                     if len(v) == 1: 
-                        summary['unique_sizes'] += 1
+                        summary.unique_sizes += 1
                         continue
 
-                    # Finally, things get interesting.
-                    if not pargs.quiet: 
+                    # Things get interesting.
+                    if pargs.verbose: 
                         print("checking {} possible duplicates matching {}".format(len(v), k))
                     for t in v:
                         try:
@@ -154,7 +162,12 @@ def undeux_main() -> int:
                                 int(now-stats.st_mtime), 
                                 int(now-stats.st_atime + 1)]
 
+                            # For convenience, Scorer.__call__ is the appropriate
+                            # way to evaluate the score.
                             ugliness = scorer(*my_stats)
+
+                            # Put the ugliness first in the tuple for ease of
+                            # sorting by most ugly first.
                             hashes[f.hash].append((ugliness, str(f), my_stats))
 
                         except FileNotFoundError as e:
@@ -168,31 +181,37 @@ def undeux_main() -> int:
 
                 except OuterBlock as e:
                     continue
-        except KeyError as e:
-            # we are finished.
-            pass
-        
-        summary['num_hashes'] = len(hashes)
-        summary['duplicate_files'] = 0
-        print(80*"=")
-        try:
-            for i, file_info in hashes.items():
-                if len(file_info) == 1: continue
-                summary['duplicate_files'] += 1
 
+            except KeyError as e:
+                # we are finished.
+                break
+        
+        summary.hashed_files = len(hashes)
+        print(80*"=")
+        while True:
+            try:
+                i, file_info = hashes.popitem()
+                if len(file_info) == 1: continue
+
+                summary.duplicated_files += 1
                 # Sort by ugliness, most ugly first.
                 v = sorted(file_info, reverse=True)
+                waste = sum(_[2][0] for _ in file_info[1:])
+                summary.wasted_space += waste
+                if waste > summary.biggest_waste: summary.biggest_waste = waste
+
                 target = v[0][1]
                 if pargs.verbose: print("{} -> {}".format(target, i, v))
                 for vv in v:
                     print("{}".format(vv))
                 print(80*'-')
 
-        except KeyError as e:
-            # we are finished.
-            print("{} duplicate files.".format(duplicate_files))
+            except KeyError as e:
+                # we are finished.
+                print(80*"=")
+                break
 
-        print(80*"=")
+        print("{}".format(summary))
         
 
 if __name__ == '__main__':
@@ -203,9 +222,3 @@ if __name__ == '__main__':
     sys.exit(undeux_main())
 else:
     pass
-
-
-
-
-
-

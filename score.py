@@ -14,11 +14,23 @@ __license__ =       'MIT'
 import math
 
 class Scorer:
+    """
+    This function uses a generalized sigmoid to produce a 
+    range of values on the half-open interval [0..1). The
+    default values for the function's parameters work well
+    enough to be useful. 
+
+    For more information on the sigmoid transformation, see
+    the excellent Wikipedia article:
+
+    https://en.m.wikipedia.org/wiki/Sigmoid_function 
+    """
     
-    def __init__(self,
+    def __init__(self, *,
         max_value:float= 1.0,
         incline:float= -0.15,
-        midpoint:float= 38) -> None:
+        midpoint:float= 40,
+        num_figures:int=4) -> None:
 
         self.sigmoid_max = max_value
         self.sigmoid_incline = incline
@@ -38,8 +50,8 @@ class Scorer:
             file_age = math.log(file_age_ago)
 
             total = sum([file_size, un_mod_time, un_used_time, file_age])
-            return ( self.sigmoid_max / 
-                (math.exp(self.sigmoid_incline*(total - self.sigmoid_midpoint)) + 1) )
+            return round( self.sigmoid_max / 
+                (math.exp(self.sigmoid_incline*(total - self.sigmoid_midpoint)) + 1), self.num_figures )
 
         except Exception as e:
             # This happens when try to calculate stats for a file that is 
