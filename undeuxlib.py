@@ -61,18 +61,18 @@ class UltraDict: pass
 
 class UltraDict(collections.defaultdict):
     """
-    An UltraDict is a defaultdict with list values that are
+    An UltraDict is a defaultdict with set values that are
     automagically created or appended when we do the ultramerge
     operation represented by the << operator.
     """
     def __init__(self) -> None:
-        collections.defaultdict.__init__(self, list)
+        collections.defaultdict.__init__(self, set)
 
 
     def __lshift__(self, info:collections.defaultdict) -> UltraDict:
         for k, v in info.items():
             if k in self:
-                self[k].extend(info[k])
+                self[k].update(info[k])
             else:
                 self[k] = info[k]
 
@@ -108,7 +108,7 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
     # Two different approaches, depending on whether we are following
     # symbolic links.
     stat_function = os.stat if pargs.follow_links else os.lstat
-    websters = collections.defaultdict(list)
+    websters = collections.defaultdict(set)
 
     exclude = gkf.listify(pargs.exclude)
     start_time = time.time()
@@ -159,22 +159,14 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
                 if pargs.verbose: print("!young! {}".format(k))
                 continue
 
-            # This manoeuvre lets us read the contents and determine
-            # the hash.
+            # Realizing that a file's name may have multiple valid
+            # representations because of relative paths, let's exploit
+            # the fact that fname always gives us the absolute path,
+            # and then we will use the fact that sets have no duplicate
+            # elements.
             F = fname.Fname(k)
             
-            # Note that this operation changes the times to "seconds ago"
-            # from the start time of the scanning. 
-            stats = [ 
-                str(F),
-                start_time - data.st_mtime, 
-                start_time - data.st_atime, 
-                start_time - data.st_ctime 
-                ]
-
-            # stats.append(scorer(data.st_size, stats[], stats[3], stats[4]))
-            websters[data.st_size].append(stats)
-            if pargs.verbose: print("{}".format(stats))
+            websters[data.st_size].update(str(F))
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
