@@ -58,64 +58,89 @@ python undeux.py --just-do-it 2>myoutput`
 
 Creates a file named `myoutput` with the results.
 
-`-? / --help / --explain` :: This is it; you are here. There is no
-    more.
+```bash
+-? / --help / --explain
+```
+This is it; you are here. There is no
+more.
 
-`--dir {dir-name} [--dir {dir-name} .. ]`
-    This is an optional parameter to name several directories,
-    mount points, or drives to include in the search. If --dir
-    is not present, the default value is the user's home.
+```bash
+--dir {dir-name} [--dir {dir-name} .. ]
+```
+This is an optional parameter to name several directories,
+mount points, or drives to include in the search. If --dir
+is not present, the default value is the user's home.
 
-    [[ NOTE: --dir: the directory names may contain environment
-    variables. They will be correctly expanded. -- end note. ]]
+[[ NOTE: --dir: the directory names may contain environment
+variables. They will be correctly expanded. -- end note. ]]
 
-`--exclude / -x {dir-name} [ -x {dir-name} .. ]`
-    Exclude these dirs from consideration. This is done primarly
-    for excluding things like `.git` directories, where there
-  1
-    are certainly no files that should be removed.
+```
+--exclude / -x {dir-name} [ -x {dir-name} .. ]
+```
+Exclude these dirs from consideration. This is done primarly
+for excluding things like `.git` directories, where there
+are certainly no files that should be removed.
 
 `--follow-links`
-    If present, symbolic links will be dereferenced for purposes
-    of consideration of duplicates. Use of this switch requires
-    careful consideration, and it is probably only useful in
-    cases where you think you have files in your directory of
-    interest that are duplicates of things elsewhere that are
-    mentioned by symbolic links that are *also* in your
-    directory of interest.
+If present, symbolic links will be dereferenced for purposes
+of consideration of duplicates. Use of this switch requires
+careful consideration, and it is probably only useful in
+cases where you think you have files in your directory of
+interest that are duplicates of things elsewhere that are
+mentioned by symbolic links that are *also* in your
+directory of interest.
 
-`--just-do-it`
-    Accept all defaults, and run the program.
+```bash
+--include-hidden
+``` 
+Undoes the default exclusion of hidden directories.
 
-`--nice {int}`
-    Keep in mind a terabyte of disc could hold one million files
-    at one megabyte each. You should be nice, and frankly, the program
-    may run faster in nice mode. The default value is 20, which
-    on Linux is as nice as you can be.
+```bash
+--just-do-it
+```
+Accept all defaults, and run the program.
 
-`--quiet`
-    I know what I am doing. Just let me know when you are finished.
-    This option is normally off, and the program does provide info
-    as it runs. However, if logorrhea is your thing, then --verbose
-    is what you want.
+```bash
+--nice {int}
+```
+Keep in mind a terabyte of disc could hold one million files
+at one megabyte each. You should be nice, and frankly, the program
+may run faster in nice mode. The default value is 20, which
+on Linux is as nice as you can be.
 
-`--small-file {int}`
-    Define the size of a small file in bytes. These will be ignored.
-    Many duplicate small files will indeed clutter the inode space
-    in the directory system, but many projects depend on tiny and
-    duplicate small .conf files being present. The default value is
-    4096.
+```bash
+--quiet
+```
+I know what I am doing. Just let me know when you are finished.
+This option is normally off, and the program does provide info
+as it runs. However, if logorrhea is your thing, then --verbose
+is what you want.
 
-`--verbose`
-    Tell all.
+```bash
+--small-file {int}
+```
+Define the size of a small file in bytes. These will be ignored.
+Many duplicate small files will indeed clutter the inode space
+in the directory system, but many projects depend on tiny and
+duplicate small .conf files being present. The default value is
+4096.
 
-`--version`
-    Print information about the version of the program and the libraries,
-    and then exit.
+```bash
+--verbose
+```
+Tell all.
 
-`--young-file {int}`
-    Define how new a file needs to be to be ignored from processing.
-    The idea is that if you downloaded Apocalypse Now from Amazon only
-    one week ago, then you probably want to keep this whale even
-    though it is 50+GB. The default is zero (0), i.e., consider all files,
-    even new ones, when looking for duplicates.
+```bash
+--version
+```
+Print information about the version of the program and the libraries,
+and then exit.
+
+```bash
+--young-file {int}
+```
+Define how new a file needs to be to be ignored from processing.
+The idea is that if you downloaded Apocalypse Now from Amazon only
+one week ago, then you probably want to keep this whale even
+though it is 50+GB. The default is zero (0), i.e., consider all files,
+even new ones, when looking for duplicates.
