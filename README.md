@@ -52,7 +52,9 @@ THE OPTIONS:
 stdout. You can use I/O redirection to write the output to a file.
 Example
 
-    `python undeux.py --just-do-it 2>myoutput`
+```bash
+python undeux.py --just-do-it 2>myoutput`
+```
 
 Creates a file named `myoutput` with the results.
 
