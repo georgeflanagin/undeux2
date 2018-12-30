@@ -32,6 +32,12 @@ from   help import undeux_help
 import score
 import undeuxlib
 
+# Exception for getting out of a nested for-block.
+class OuterBlock(Exception):
+    def __init__(self) -> None:
+        Exception.__init__(self)
+
+
 def undeux_main() -> int:
     """
     This function loads the arguments, creates the console output,
@@ -85,8 +91,8 @@ def undeux_main() -> int:
     parser.add_argument('--version', action='store_true', 
         help='Print the version and exit.')
 
-    parser.add_argument('--young-file', type=int, default=30,
-        help="default is 30 days. You are clearly using it.")
+    parser.add_argument('--young-file', type=int, default=0,
+        help="default is 0 days.")
 
     pargs = parser.parse_args()
     if pargs.explain: return undeux_help()
@@ -143,6 +149,7 @@ def undeux_main() -> int:
                 # This data structure is huge, so let's shrink it as
                 # we go.
                 k, v = file_info.popitem()
+                print("{},{}".format(k,v))
                 try:
                     # If there is only one file this size on the system, then
                     # it must be unique.
@@ -177,6 +184,7 @@ def undeux_main() -> int:
                         except Exception as e:
                             # something uncorrectable happened, but let's not bail out.
                             gkf.tombstone(str(e))
+                            sys.exit(os.EX_OK)
                             raise OuterBlock()
 
                 except OuterBlock as e:

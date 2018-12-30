@@ -50,29 +50,23 @@ schema = [
     )"""
     ]
 
-# Exception for getting out of a nested for-block.
-class OuterBlock(Exception):
-    def __init__(self) -> None:
-        Exception.__init__(self)
-
-
 # The Guido hack (which we will not need in 3.8!)
 class UltraDict: pass
 
 class UltraDict(collections.defaultdict):
     """
-    An UltraDict is a defaultdict with set values that are
+    An UltraDict is a defaultdict with list values that are
     automagically created or appended when we do the ultramerge
     operation represented by the << operator.
     """
     def __init__(self) -> None:
-        collections.defaultdict.__init__(self, set)
+        collections.defaultdict.__init__(self, list)
 
 
     def __lshift__(self, info:collections.defaultdict) -> UltraDict:
         for k, v in info.items():
             if k in self:
-                self[k].update(info[k])
+                self[k].append(info[k])
             else:
                 self[k] = info[k]
 
@@ -108,7 +102,7 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
     # Two different approaches, depending on whether we are following
     # symbolic links.
     stat_function = os.stat if pargs.follow_links else os.lstat
-    websters = collections.defaultdict(set)
+    websters = collections.defaultdict(list)
 
     exclude = gkf.listify(pargs.exclude)
     start_time = time.time()
@@ -161,9 +155,7 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
 
             # Realizing that a file's name may have multiple valid
             # representations because of relative paths, let's exploit
-            # the fact that fname always gives us the absolute path,
-            # and then we will use the fact that sets have no duplicate
-            # elements.
+            # the fact that fname always gives us the absolute path.
             F = fname.Fname(k)
             
             websters[data.st_size].update(str(F))
@@ -172,6 +164,8 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
     elapsed_time = str(round(stop_time-start_time, 3))
     num_files = str(len(websters))
     gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
+
+    print("websters is {}".format(websters))
     
     return websters
 
@@ -203,7 +197,8 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
                 continue
 
             oed << scan_source(folder, pargs)
- 
+            print("oed is {}".format(oed)) 
+
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
         pass
