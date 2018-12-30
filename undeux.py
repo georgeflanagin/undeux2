@@ -51,7 +51,7 @@ def undeux_main() -> int:
 
     parser.add_argument('-?', '--explain', action='store_true')
 
-    parser.add_argument('--big', type=int, default=1<<28,
+    parser.add_argument('--big-file', type=int, default=1<<28,
         help="A file larger than this value is *big*")
 
     parser.add_argument('--dir', action='append', 
@@ -103,6 +103,11 @@ def undeux_main() -> int:
     if not pargs.dir: pargs.dir = ['.']
     pargs.dir = list(set([ str(fname.Fname(_)) for _ in pargs.dir]))
     pargs.exclude = list(set(pargs.exclude))
+
+    # pargs.big_file must be larger than pargs.small_file. If it is 
+    # a small integer, then embiggen it to be an assumed power of two.
+    if pargs.big_file < 33: pargs.big_file = 1<<pargs.big
+    if pargs.big_file < pargs.small_file: pargs.big_file = 1<<30
 
     print("arguments after translation:")
     gkf.show_args(pargs)
@@ -174,7 +179,7 @@ def undeux_main() -> int:
                             # Put the ugliness first in the tuple for ease of
                             # sorting by most ugly first.
                             
-                            if k > pargs.big: print("hashing large file: {}".format(str(f)))
+                            if (k > pargs.big_file) and pargs.verbose: print("hashing large file: {}".format(str(f)))
                             hashes[f.hash].append((ugliness, str(f), my_stats))
 
                         except FileNotFoundError as e:
@@ -188,6 +193,10 @@ def undeux_main() -> int:
 
                 except OuterBlock as e:
                     continue
+
+            except KeyboardInterrupt as e:
+                print('exiting with control-C')
+                sys.exit(os.EX_NOINPUT)
 
             except KeyError as e:
                 # we are finished.
@@ -212,6 +221,10 @@ def undeux_main() -> int:
                 for vv in v:
                     print("{}".format(vv))
                 print(80*'-')
+
+            except KeyboardInterrupt as e:
+                print('exiting with control-C')
+                sys.exit(os.EX_NOINPUT)
 
             except KeyError as e:
                 # we are finished.
