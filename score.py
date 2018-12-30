@@ -35,6 +35,7 @@ class Scorer:
         self.sigmoid_max = max_value
         self.sigmoid_incline = incline
         self.sigmoid_midpoint = midpoint
+        self.num_figures = num_figures
         
 
     def __call__(self, file_size:int,
