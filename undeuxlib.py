@@ -66,7 +66,7 @@ class UltraDict(collections.defaultdict):
     def __lshift__(self, info:collections.defaultdict) -> UltraDict:
         for k, v in info.items():
             if k in self:
-                self[k].append(info[k])
+                self[k].extend(info[k])
             else:
                 self[k] = info[k]
 
@@ -158,7 +158,7 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
             # the fact that fname always gives us the absolute path.
             F = fname.Fname(k)
             
-            websters[data.st_size].update(str(F))
+            websters[data.st_size].append(str(F))
 
     stop_time = time.time()
     elapsed_time = str(round(stop_time-start_time, 3))
