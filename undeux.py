@@ -149,7 +149,6 @@ def undeux_main() -> int:
                 # This data structure is huge, so let's shrink it as
                 # we go.
                 k, v = file_info.popitem()
-                print("{},{}".format(k,v))
                 try:
                     # If there is only one file this size on the system, then
                     # it must be unique.
@@ -162,7 +161,7 @@ def undeux_main() -> int:
                         print("checking {} possible duplicates matching {}".format(len(v), k))
                     for t in v:
                         try:
-                            f = fname.Fname(t[0])
+                            f = fname.Fname(t)
                             stats = os.stat(str(f))
                             my_stats = [stats.st_size,
                                 int(now-stats.st_ctime), 
@@ -175,6 +174,7 @@ def undeux_main() -> int:
 
                             # Put the ugliness first in the tuple for ease of
                             # sorting by most ugly first.
+                            
                             hashes[f.hash].append((ugliness, str(f), my_stats))
 
                         except FileNotFoundError as e:
@@ -184,7 +184,6 @@ def undeux_main() -> int:
                         except Exception as e:
                             # something uncorrectable happened, but let's not bail out.
                             gkf.tombstone(str(e))
-                            sys.exit(os.EX_OK)
                             raise OuterBlock()
 
                 except OuterBlock as e:

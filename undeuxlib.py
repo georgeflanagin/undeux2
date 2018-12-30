@@ -164,8 +164,6 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
     elapsed_time = str(round(stop_time-start_time, 3))
     num_files = str(len(websters))
     gkf.tombstone(" :: ".join([src, elapsed_time, num_files]))
-
-    print("websters is {}".format(websters))
     
     return websters
 
@@ -197,7 +195,6 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
                 continue
 
             oed << scan_source(folder, pargs)
-            print("oed is {}".format(oed)) 
 
     except KeyboardInterrupt as e:
         gkf.tombstone('interrupted by cntl-C')
@@ -207,6 +204,5 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
         gkf.tombstone('major problem. {}'.format(e))
         print(gkf.formatted_stack_trace())
 
-    if pargs.verbose: pprint.pprint(oed)
     return oed
 
