@@ -51,6 +51,9 @@ def undeux_main() -> int:
 
     parser.add_argument('-?', '--explain', action='store_true')
 
+    parser.add_argument('--big', type=int, default=1<<28,
+        help="A file larger than this value is *big*")
+
     parser.add_argument('--dir', action='append', 
         help="directory to investigate (if not your home dir)")
 
@@ -171,6 +174,7 @@ def undeux_main() -> int:
                             # Put the ugliness first in the tuple for ease of
                             # sorting by most ugly first.
                             
+                            if k > pargs.big: print("hashing large file: {}".format(str(f)))
                             hashes[f.hash].append((ugliness, str(f), my_stats))
 
                         except FileNotFoundError as e:
