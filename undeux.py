@@ -76,9 +76,6 @@ def undeux_main() -> int:
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
 
-    parser.add_argument('--output', type=str, default='.',
-        help="where to write the log file. The default is $PWD.")
-
     parser.add_argument('--quiet', action='store_true',
         help="eliminates narrative while running.")
 
@@ -92,7 +89,7 @@ def undeux_main() -> int:
         help='Print the version and exit.')
 
     parser.add_argument('--young-file', type=int, default=0,
-        help="default is 0 days.")
+        help="default is 0 days -- i.e., consider all files, even new ones.")
 
     pargs = parser.parse_args()
     if pargs.explain: return undeux_help()
@@ -104,7 +101,6 @@ def undeux_main() -> int:
     
     # And let's take care of env vars and other symbols in dir names. Be
     # sure to eliminate duplicates.
-    pargs.output = str(fname.Fname(pargs.output))
     if not pargs.dir: pargs.dir = ['.']
     pargs.dir = list(set([ str(fname.Fname(_)) for _ in pargs.dir]))
     pargs.exclude = list(set(pargs.exclude))
@@ -118,8 +114,12 @@ def undeux_main() -> int:
         return os.EX_OK
 
     if not pargs.just_do_it:
-        r = input('\nDoes this look right to you? ')
-        if r.lower() not in "yes": sys.exit(os.EX_OK)
+        try:
+            r = input('\nDoes this look right to you? ')
+            if r.lower() not in "yes": sys.exit(os.EX_CONFIG)
+        except KeyboardInterrupt as e:
+            print('\nApparently it does not look right. Exiting via control-C')
+            sys.exit(os.EX_CONFIG)
 
     # OK, we have the green light.
     # Always be nice.

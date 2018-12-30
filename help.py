@@ -86,7 +86,7 @@ def undeux_help() -> int:
         for excluding things like `.git` directories, where there 
         are certainly no files that should be removed.        
 
-    --follow 
+    --follow-links 
         If present, symbolic links will be dereferenced for purposes
         of consideration of duplicates. Use of this switch requires
         careful consideration, and it is probably only useful in 
@@ -129,7 +129,8 @@ def undeux_help() -> int:
         Define how new a file needs to be to be ignored from processing.
         The idea is that if you downloaded Apocalypse Now from Amazon only
         one week ago, then you probably want to keep this whale even 
-        though it is 50+GB. 
+        though it is 50+GB.  The default is zero (0), which means to consider
+        even new files when looking for duplicates.
     """
 
     gkf.nicely_display(undeux_help.__doc__)

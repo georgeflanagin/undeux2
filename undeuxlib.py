@@ -109,7 +109,6 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
 
     for root_dir, folders, files in os.walk(src, followlinks=pargs.follow_links):
         if '/.' in root_dir and not pargs.include_hidden: 
-            gkf.tombstone('skipping dotted directory {}'.format(root_dir))
             continue
 
         if any(ex in root_dir for ex in pargs.exclude): 

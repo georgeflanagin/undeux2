@@ -13,7 +13,7 @@ argument:
 
 undeux works by creating a score for each file that indicates the
 likelihood that it is a candidate for removal. The scoring is on
-the half open interval [0 .. 1), where zero indicates that the file
+the half open interval `[0 .. 1)`, where zero indicates that the file
 may not be removed, and values near 1 indicate that if you don't
 remove it fairly soon, WW III will break out somewhere near your
 disc drive[s]. Most files are somewhere between.
@@ -48,10 +48,10 @@ through this help a second time, or write to me at this address:
 THE OPTIONS:
 ==================================================================
 
--? / --help / --explain :: This is it; you are here. There is no
+`-? / --help / --explain` :: This is it; you are here. There is no
     more.
 
---dir {dir-name} [--dir {dir-name} .. ]
+`--dir {dir-name} [--dir {dir-name} .. ]`
     This is an optional parameter to name several directories,
     mount points, or drives to include in the search. If --dir
     is not present, the default value is the user's home.
@@ -59,19 +59,13 @@ THE OPTIONS:
     [[ NOTE: --dir: the directory names may contain environment
     variables. They will be correctly expanded. -- end note. ]]
 
---exclude / -x {dir-name} [ -x {dir-name} .. ]
+`--exclude / -x {dir-name} [ -x {dir-name} .. ]`
     Exclude these dirs from consideration. This is done primarly
     for excluding things like `.git` directories, where there
   1
     are certainly no files that should be removed.
 
-Press <enter> to continue .....
---export {csv | [msg]pack }
-    By default, this switch is *OFF*. If you would like to export
-    the contents of the database then a file will be created
-    as described in the --db switch above.
-
---follow
+`--follow-links`
     If present, symbolic links will be dereferenced for purposes
     of consideration of duplicates. Use of this switch requires
     careful consideration, and it is probably only useful in
@@ -80,22 +74,22 @@ Press <enter> to continue .....
     mentioned by symbolic links that are *also* in your
     directory of interest.
 
---just-do-it
+`--just-do-it`
     Accept all defaults, and run the program.
 
---link-dir
+`--link-dir`
     If this switch is present, the directory that is associated
     with `--output` will contain a directory named 'links' that
     will have symbolic links to all the duplicate files. This
     feature is for convenience in their removal.
 
---nice {int}
+`--nice {int}`
     Keep in mind a terabyte of disc could hold one million files
     at one megabyte each. You should be nice, and frankly, the program
     may run faster in nice mode. The default value is 20, which
     on Linux is as nice as you can be.
 
---output {directory-name}
+`--output {directory-name}`
     This is the directory where names of possibly dup files will
     be placed. The default is a directory named 'undeuxs' in the
     user's home directory, so `~/undeuxs` on Linux and UNIX, and
@@ -105,28 +99,29 @@ Press <enter> to continue .....
     This directory is *never* examined for duplicate files, or more
     correctly, any file in it is assumed to be unique and worth keeping.
 
---quiet
+`--quiet`
     I know what I am doing. Just let me know when you are finished.
     This option is normally off, and the program does provide info
     as it runs. However, if logorrhea is your thing, then --verbose
     is what you want.
 
---small-file {int}
+`--small-file {int}`
     Define the size of a small file in bytes. These will be ignored.
     Many duplicate small files will indeed clutter the inode space
     in the directory system, but many projects depend on tiny and
     duplicate small .conf files being present. The default value is
     4096.
 
---verbose
+`--verbose`
     Tell all.
 
---version
+`--version`
     Print information about the version of the program and the libraries,
     and then exit.
 
---young-file {int}
+`--young-file {int}`
     Define how new a file needs to be to be ignored from processing.
     The idea is that if you downloaded Apocalypse Now from Amazon only
     one week ago, then you probably want to keep this whale even
-    though it is 50+GB.
+    though it is 50+GB. The default is zero (0), i.e., consider all files,
+    even new ones, when looking for duplicates.
