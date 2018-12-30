@@ -63,6 +63,10 @@ def undeux_main() -> int:
     parser.add_argument('--follow-links', action='store_true',
         help="follow symbolic links -- default is not to.")
 
+    parser.add_argument('--hogs', type=int, default=0, 
+        choices=([0] + list(range(20,33))),
+        help='undocumented feature for experts.')
+
     parser.add_argument('--include-hidden', action='store_true',
         help="search hidden directories as well.")
 
@@ -108,6 +112,12 @@ def undeux_main() -> int:
     # a small integer, then embiggen it to be an assumed power of two.
     if pargs.big_file < 33: pargs.big_file = 1<<pargs.big
     if pargs.big_file < pargs.small_file: pargs.big_file = 1<<30
+
+    # Hogs causes us to [re]set other parameters.
+    if pargs.hogs > 0:
+        pargs.small_file = 1<<pargs.hogs
+        pargs.big_file = pargs.small_file + 1
+        pargs.dir = '/'
 
     print("arguments after translation:")
     gkf.show_args(pargs)
@@ -175,11 +185,12 @@ def undeux_main() -> int:
                             # For convenience, Scorer.__call__ is the appropriate
                             # way to evaluate the score.
                             ugliness = scorer(*my_stats)
+                            
+                            if ((k > pargs.big_file) and (pargs.verbose or pargs.hogs)): 
+                                print("hashing large file: {}".format(str(f)))
 
                             # Put the ugliness first in the tuple for ease of
                             # sorting by most ugly first.
-                            
-                            if (k > pargs.big_file) and pargs.verbose: print("hashing large file: {}".format(str(f)))
                             hashes[f.hash].append((ugliness, str(f), my_stats))
 
                         except FileNotFoundError as e:
