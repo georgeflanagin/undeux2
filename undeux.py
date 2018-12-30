@@ -57,10 +57,6 @@ def undeux_main() -> int:
     parser.add_argument('-x', '--exclude', action='append', default=[],
         help="one or more directories to ignore. Defaults to exclude hidden dirs.")
 
-    parser.add_argument('--export', type=str, default='csv',
-        choices=('csv', 'pack', 'msgpack', None),
-        help="if present, export the results in this format.")
-
     parser.add_argument('--follow-links', action='store_true',
         help="follow symbolic links -- default is not to.")
 
