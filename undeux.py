@@ -16,13 +16,11 @@ import typing
 from   typing import *
 
 import argparse
-import cmd
 import collections
 import contextlib
 from   datetime import datetime
-import math
 import os
-import pprint
+import resource
 import sys
 import time
 
@@ -82,8 +80,8 @@ def undeux_main() -> int:
     parser.add_argument('--quiet', action='store_true',
         help="eliminates narrative while running.")
 
-    parser.add_argument('--small-file', type=int, default=4096,
-        help="files less than this size (default 4096) are not evaluated.")
+    parser.add_argument('--small-file', type=int, default=resource.getpagesize()+1,
+        help="files less than this size (default {}) are not evaluated.".format(resource.getpagesize()+1))
 
     parser.add_argument('--verbose', action='store_true',
         help="go into way too much detail.")
@@ -110,8 +108,9 @@ def undeux_main() -> int:
 
     # pargs.big_file must be larger than pargs.small_file. If it is 
     # a small integer, then embiggen it to be an assumed power of two.
-    if pargs.big_file < 33: pargs.big_file = 1<<pargs.big
-    if pargs.big_file < pargs.small_file: pargs.big_file = 1<<30
+    if pargs.big_file > 0:
+        if pargs.big_file < 33: pargs.big_file = 1<<pargs.big_file
+        if pargs.big_file < pargs.small_file: pargs.big_file = 1<<30
 
     # Hogs causes us to [re]set other parameters.
     if pargs.hogs > 0:
@@ -186,12 +185,21 @@ def undeux_main() -> int:
                             # way to evaluate the score.
                             ugliness = scorer(*my_stats)
                             
-                            if ((k > pargs.big_file) and (pargs.verbose or pargs.hogs)): 
+                            if (pargs.big_file and (k > pargs.big_file)
+                                    and (pargs.verbose or pargs.hogs)): 
                                 print("hashing large file: {}".format(str(f)))
 
                             # Put the ugliness first in the tuple for ease of
-                            # sorting by most ugly first.
-                            hashes[f.hash].append((ugliness, str(f), my_stats))
+                            # sorting by most ugly first. 
+                            # NOTE: big_file says essentially that any file this size
+                            #   or larger in unlikely to coexist with another file
+                            #   of exactly the same size unless that file has identical
+                            #   contents. In that case, we skip the (lengthy) hashing
+                            #   operation, and index on size rather than hash.
+                            if (pargs.big_file and (k > pargs.big_file)):
+                                hashes[k].append((ugliness, str(f), my_stats))
+                            else:
+                                hashes[f.hash].append((ugliness, str(f), my_stats))
 
                         except FileNotFoundError as e:
                             # It got deleted while we were working. No big deal.

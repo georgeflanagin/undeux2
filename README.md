@@ -65,6 +65,11 @@ This is it; you are here. There is no
 more.
 
 ```bash
+--big-file
+```
+Experimental feature. 
+
+```bash
 --dir {dir-name} [--dir {dir-name} .. ]
 ```
 This is an optional parameter to name several directories,

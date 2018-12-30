@@ -73,6 +73,10 @@ def undeux_help() -> int:
     -? / --help / --explain :: This is it; you are here. There is no
         more.
 
+    --big-file {int}
+        The value can be a literal file size, or binary logarithm (power
+        of 2). A commonsense value is something like 28, which is ~256MB.
+
     --dir {dir-name} [--dir {dir-name} .. ]
         This is an optional parameter to name several directories,
         mount points, or drives to include in the search. If --dir

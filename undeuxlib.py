@@ -15,18 +15,9 @@ __license__ =       'MIT'
 import typing
 from   typing import *
 
-import argparse
-import cmd
 import collections
-import csv
-from   datetime import datetime
-from   functools import reduce
 import hashlib
-import math
-import operator
 import os
-import pprint
-import sqlite3
 import sys
 import time
 
