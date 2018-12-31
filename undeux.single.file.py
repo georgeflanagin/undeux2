@@ -478,6 +478,15 @@ def nicely_display(s:str) -> bool:
     return True
 
 
+def now_as_string(s:str = "T") -> str:
+    """
+    Return full timestamp, fixed width for printing, parsing, and readability:
+
+    2007-02-07 @ 23:11:45
+    """
+    return datetime.now().isoformat()[:21].replace("T",s)
+
+
 class objectify(dict):
     """
     Make a dict into an object for notational convenience.
@@ -708,8 +717,6 @@ class Scorer:
             # in use. Clearly we need to keep it!
             return 0
 
-
-scorer = Scorer()
 
 # The Guido hack (which we will not need in 3.8!)
 class UltraDict: pass
@@ -983,7 +990,7 @@ def undeux_main() -> int:
 
     with contextlib.redirect_stdout(sys.stderr):
         # This function takes a while to execute. :-)
-        file_info = undeuxlib.scan_sources(pargs)
+        file_info = scan_sources(pargs)
         summary.total_files = len(file_info)
 
         hashes = collections.defaultdict(list)
@@ -992,7 +999,7 @@ def undeux_main() -> int:
         # NOTE: if you want to change the way the scoring operates,
         # this is the place to do it. The Scorer.__init__ function
         # takes keyword parameters to alter its operation.
-        scorer = score.Scorer()
+        scorer = Scorer()
         now = time.time()
 
         while True:
