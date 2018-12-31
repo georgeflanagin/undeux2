@@ -126,6 +126,8 @@ def undeux_main() -> int:
         print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
         return os.EX_OK
 
+    # Get a little confirmation be continuing unless we have been told to 
+    # charge ahead.
     if not pargs.just_do_it:
         try:
             r = input('\nDoes this look right to you? ')
@@ -134,8 +136,7 @@ def undeux_main() -> int:
             print('\nApparently it does not look right. Exiting via control-C')
             sys.exit(os.EX_CONFIG)
 
-    # OK, we have the green light.
-    # Always be nice.
+    # OK, we have the green light. Always be nice.
     os.nice(pargs.nice)
 
     summary = gkf.sloppy(dict.fromkeys([
