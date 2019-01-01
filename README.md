@@ -19,7 +19,14 @@ argument:
 
 ### How `undeux` works
 
-undeux works by creating a score for each file that indicates the
+`undeux` first processes the directory information without reading
+any of the files. It builds a collisions-allowed dictionary, where
+the size of the file is treated as the hash index, and the value 
+is a list of file names with that size.
+
+The next step is to process the hash table, and calculate the 
+
+`undeux` works by creating a score for each file that indicates the
 likelihood that it is a candidate for removal. The scoring is on
 the half open interval `[0 .. 1)`, where zero indicates that the file
 may not be removed, and values near 1 indicate that if you don't
@@ -212,7 +219,9 @@ this file:
 `-rwxrwxrwx  1 george george 537627361 Jul 22  2016 The.Quartets.PDTV.x264-CBFM.mp4`
 
 It is improbable that another file on my system that is also 537,627,361 bytes
-is something else. If you set the value to `--big-file 0` explicitly,
+contains something other than this short BBC documentary about the Australian
+composer [Peter Sculthorpe](https://en.wikipedia.org/wiki/Peter_Sculthorpe). 
+If you set the value to `--big-file 0` explicitly,
 `undeux` goes to paranoid mode. The default value is 256MB, which you may find
 a little large for best performance.
 
@@ -220,3 +229,13 @@ For ease of use by those of us who think in binary, small values of `--big-file`
 are assumed to be binary logarithms rather than literal values. So, `--big-file 20`
 would define one megabyte as a *big file*, and `--big-file 30` does the same 
 sleight of hand for a gigabyte file.
+
+### --include-hidden
+
+Most hidden directories don't even show up in the GNU desktop, the Finder, or
+even a simple `ls` command. So by default we don't look there. 
+
+### -x / --exclude
+
+As mentioned above, this is not a regex, and not even a file system wildcard.
+It is only a text fragment. 
