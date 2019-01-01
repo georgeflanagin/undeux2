@@ -85,15 +85,7 @@ This is it; you are here. There is no more.
 ```bash
 --big-file {integer}
 ```
-Experimental feature that requires some explanation. On my system I have
-this file: 
-
-`-rwxrwxrwx  1 george george 537627361 Jul 22  2016 The.Quartets.PDTV.x264-CBFM.mp4`
-
-It is improbable that another file on my system that is also 537,627,361 bytes
-is something else. If you set the value to `--big-file 0` explicitly,
-`undeux` goes to paranoid mode. The default value is 256MB, which you may find
-a little large for best performance. See use cases for more information.
+See use cases for more information.
 
 ```bash
 --dir {dir-name} [--dir {dir-name} .. ]
@@ -121,6 +113,11 @@ cases where you think you have files in your directory of
 interest that are duplicates of things elsewhere that are
 mentioned by symbolic links that are *also* in your
 directory of interest.
+
+```bash
+--hogs [0, 20-33]
+```
+Experimental feature. Use at your own risk.
 
 ```bash
 --include-hidden
@@ -157,7 +154,7 @@ Define the size of a small file in bytes. These will be ignored.
 Many duplicate small files will indeed clutter the inode space
 in the directory system, but many projects depend on tiny and
 duplicate small .conf files being present. The default value is
-4096.
+the size of a page on your machine plus one.
 
 ```bash
 --verbose
@@ -181,4 +178,45 @@ even new ones, when looking for duplicates.
 
 ## Use cases
 
-First, you may find it useful to create a bash function to do the 
+First, you may find it useful to create a bash function to simplify the 
+use. The project includes a `undeux.bash` file with a few functions that
+might make your life easier. At a minimum, you probably want something like
+this:
+
+```bash
+export PYTHONPATH="$PYTHONPATH:~/gkflib"
+
+undeux()
+{
+    pushd ~/undeux 2>&1 >/dev/null
+    python undeux.py "$@"
+    popd 2>&1 >/dev/null
+}
+```
+
+This will let you type `undeux` to run the program, and any command line
+options will be passed to the program.
+
+### --small-file
+
+The theory behind this parameter is that (1) small files have a high likelihood
+of being the same size, and (2) they are often configuration files of some kind
+that need to be there. The default value is likely to be 4097 on most systems, 
+which gracefully ignores things like the `.DS_Store` files in Macintosh directories. 
+
+### --big-file
+
+Experimental feature that requires some explanation. On my system I have
+this file: 
+
+`-rwxrwxrwx  1 george george 537627361 Jul 22  2016 The.Quartets.PDTV.x264-CBFM.mp4`
+
+It is improbable that another file on my system that is also 537,627,361 bytes
+is something else. If you set the value to `--big-file 0` explicitly,
+`undeux` goes to paranoid mode. The default value is 256MB, which you may find
+a little large for best performance.
+
+For ease of use by those of us who think in binary, small values of `--big-file` 
+are assumed to be binary logarithms rather than literal values. So, `--big-file 20`
+would define one megabyte as a *big file*, and `--big-file 30` does the same 
+sleight of hand for a gigabyte file.
