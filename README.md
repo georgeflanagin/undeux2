@@ -1,5 +1,11 @@
 undeux
 =======================================================
+Table of contents:
+1. Summary, method of operation.
+2. Operation, the command line switches and what they mean, dependencies, etc.
+3. Use cases, how you might use this program.
+
+## Summary
 
 `undeux` is a utility to find suspiciously similiar files that
 may be duplicates.
@@ -10,6 +16,8 @@ right now. If you want to accept all the defaults, use the single
 argument:
 
     undeux --just-do-it
+
+### How `undeux` works
 
 undeux works by creating a score for each file that indicates the
 likelihood that it is a candidate for removal. The scoring is on
@@ -45,8 +53,17 @@ through this help a second time, or write to me at this address:
 
     `me+undeux@georgeflanagin.com`
 
-THE OPTIONS:
-==================================================================
+## Operation
+
+### Dependencies
+
+This project is built on another of my github projects, namely
+[gkflib](git@github.com:georgeflanagin/gkflib.git), and it depends
+on a few PyPi libraries that are pip-installable. For the Python noobs
+and neolates, this repo has a single file version of the program
+that appears to have all the dependencies resolved.
+
+### Command line switches
 
 **NOTE:** All output is written to the combined/joined stderr and
 stdout. You can use I/O redirection to write the output to a file.
@@ -58,33 +75,43 @@ python undeux.py --just-do-it 2>myoutput`
 
 Creates a file named `myoutput` with the results.
 
+OK, let's continue.
+
 ```bash
 -? / --help / --explain
 ```
-This is it; you are here. There is no
-more.
+This is it; you are here. There is no more.
 
 ```bash
---big-file
+--big-file {integer}
 ```
-Experimental feature. 
+Experimental feature that requires some explanation. On my system I have
+this file: 
+
+`-rwxrwxrwx  1 george george 537627361 Jul 22  2016 The.Quartets.PDTV.x264-CBFM.mp4`
+
+It is improbable that another file on my system that is also 537,627,361 bytes
+is something else. If you set the value to `--big-file 0` explicitly,
+`undeux` goes to paranoid mode. The default value is 256MB, which you may find
+a little large for best performance. See use cases for more information.
 
 ```bash
 --dir {dir-name} [--dir {dir-name} .. ]
 ```
 This is an optional parameter to name several directories,
 mount points, or drives to include in the search. If --dir
-is not present, the default value is the user's home.
+is not present, the default value is the user's home directory
+because this is the most likely target for cleanup.
 
 [[ NOTE: --dir: the directory names may contain environment
 variables. They will be correctly expanded. -- end note. ]]
 
 ```
---exclude / -x {dir-name} [ -x {dir-name} .. ]
+--exclude / -x {fragmentary-dir-name} [ -x {fragmentary-dir-name} .. ]
 ```
-Exclude these dirs from consideration. This is done primarly
-for excluding things like `.git` directories, where there
-are certainly no files that should be removed.
+Exclude dirs that look like these from consideration. As with the `--dir` 
+option, you may name several. This is not a regular expression, just a 
+simple fragment to match. 
 
 `--follow-links`
 If present, symbolic links will be dereferenced for purposes
@@ -98,7 +125,9 @@ directory of interest.
 ```bash
 --include-hidden
 ``` 
-Undoes the default exclusion of hidden directories.
+Undoes the default exclusion of hidden directories. Most 
+hidden directories are things like `.git`, where you would
+not want to examine a pile of binary files.
 
 ```bash
 --just-do-it
@@ -149,3 +178,7 @@ The idea is that if you downloaded Apocalypse Now from Amazon only
 one week ago, then you probably want to keep this whale even
 though it is 50+GB. The default is zero (0), i.e., consider all files,
 even new ones, when looking for duplicates.
+
+## Use cases
+
+First, you may find it useful to create a bash function to do the 
