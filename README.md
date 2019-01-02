@@ -24,7 +24,10 @@ any of the files. It builds a collisions-allowed dictionary, where
 the size of the file is treated as the hash index, and the value 
 is a list of file names with that size.
 
-The next step is to process the hash table, and calculate the 
+The next step is to process the "hash table," and calculate the 
+MD5 sums for each file of a given size, provided there is more than
+one file of that size. Certain exclusions may apply; see the section
+on `--big-file`.
 
 `undeux` works by creating a score for each file that indicates the
 likelihood that it is a candidate for removal. The scoring is on
