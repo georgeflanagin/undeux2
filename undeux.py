@@ -36,117 +36,21 @@ class OuterBlock(Exception):
         Exception.__init__(self)
 
 
-def undeux_main() -> int:
+def undeux(my_args:argparse.Namespace, my_config:dict, db:object) -> int:
     """
-    This function loads the arguments, creates the console output,
-    and runs the program. IOW, this is it.
+    This is it.
     """
 
-    # If someone has supplied no arguments, then show the help.
-    if len(sys.argv)==1: return undeux_help()
+    os.nice(my_config['general']['nice'])
 
-    parser = argparse.ArgumentParser(description='Find probable duplicate files.')
-
-    parser.add_argument('-?', '--explain', action='store_true')
-
-    parser.add_argument('--big-file', type=int, default=1<<28,
-        help="A file larger than this value is *big*")
-
-    parser.add_argument('--dir', action='append', 
-        help="directory to investigate (if not your home dir)")
-
-    parser.add_argument('-x', '--exclude', action='append', default=[],
-        help="one or more directories to ignore. Defaults to exclude hidden dirs.")
-
-    parser.add_argument('--follow-links', action='store_true',
-        help="follow symbolic links -- default is not to.")
-
-    parser.add_argument('--hogs', type=int, default=0, 
-        choices=([0] + list(range(20,33))),
-        help='undocumented feature for experts.')
-
-    parser.add_argument('--include-hidden', action='store_true',
-        help="search hidden directories as well.")
-
-    parser.add_argument('--link-dir', type=str, 
-        help="if present, we will create symlinks to the older files in this dir.")
-
-    parser.add_argument('--just-do-it', action='store_true',
-        help="run the program using the defaults.")
-
-    parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
-        help="by default, this program runs /very/ nicely at nice=20")
-
-    parser.add_argument('--quiet', action='store_true',
-        help="eliminates narrative while running.")
-
-    parser.add_argument('--small-file', type=int, default=resource.getpagesize()+1,
-        help="files less than this size (default {}) are not evaluated.".format(resource.getpagesize()+1))
-
-    parser.add_argument('--verbose', action='store_true',
-        help="go into way too much detail.")
-
-    parser.add_argument('--version', action='store_true', 
-        help='Print the version and exit.')
-
-    parser.add_argument('--young-file', type=int, default=0,
-        help="default is 0 days -- i.e., consider all files, even new ones.")
-
-    pargs = parser.parse_args()
-    if pargs.explain: return undeux_help()
-    gkf.show_args(pargs)
-
-    # We need to fix up a couple of the arguments. Let's convert the
-    # youth designation from days to seconds.
-    pargs.young_file = pargs.young_file * 60 * 60 * 24
-    
-    # And let's take care of env vars and other symbols in dir names. Be
-    # sure to eliminate duplicates.
-    if not pargs.dir: pargs.dir = ['.']
-    pargs.dir = list(set([ str(fname.Fname(_)) for _ in pargs.dir]))
-    pargs.exclude = list(set(pargs.exclude))
-
-    # pargs.big_file must be larger than pargs.small_file. If it is 
-    # a small integer, then embiggen it to be an assumed power of two.
-    if pargs.big_file > 0:
-        if pargs.big_file < 33: pargs.big_file = 1<<pargs.big_file
-        if pargs.big_file < pargs.small_file: pargs.big_file = 1<<30
-
-    # Hogs causes us to [re]set other parameters.
-    if pargs.hogs > 0:
-        pargs.small_file = 1<<pargs.hogs
-        pargs.big_file = pargs.small_file + 1
-        pargs.dir = '/'
-
-    print("arguments after translation:")
-    gkf.show_args(pargs)
-
-    if pargs.version:
-        print('UnDeux (c) 2019. George Flanagin and Associates.')
-        print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
-        return os.EX_OK
-
-    # Get a little confirmation be continuing unless we have been told to 
-    # charge ahead.
-    if not pargs.just_do_it:
-        try:
-            r = input('\nDoes this look right to you? ')
-            if r.lower() not in "yes": sys.exit(os.EX_CONFIG)
-        except KeyboardInterrupt as e:
-            print('\nApparently it does not look right. Exiting via control-C')
-            sys.exit(os.EX_CONFIG)
-
-    # OK, we have the green light. Always be nice.
-    os.nice(pargs.nice)
-
-    summary = gkf.sloppy(dict.fromkeys([
+    summary = dict.fromkeys([
         'total_files', 'unique_sizes', 
         'hashed_files', 'duplicated_files', 
-        'wasted_space', 'biggest_waste'], 0))
+        'wasted_space', 'biggest_waste'], 0)
 
     with contextlib.redirect_stdout(sys.stderr):
-        # This function takes a while to execute. :-)
-        file_info = undeuxlib.scan_sources(pargs)
+        # 
+        file_info = undeuxlib.scan_sources(my_args, my_config, db)
         summary.total_files = len(file_info)
 
         hashes = collections.defaultdict(list)

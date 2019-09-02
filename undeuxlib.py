@@ -29,18 +29,6 @@ import sqlitedb
 
 scorer = score.Scorer()
 
-schema = [
-    """CREATE TABLE filelist ( 
-    filename VARCHAR(1000) NOT NULL
-    ,content_hash CHAR(32) NOT NULL
-    ,size INTEGER
-    ,modify_age float NOT NULL
-    ,access_age float NOT NULL
-    ,create_age float NOT NULL
-    ,score float DEFAULT 0
-    )"""
-    ]
-
 # The Guido hack (which we will not need in 3.8!)
 class UltraDict: pass
 
@@ -163,6 +151,15 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
     Perform the scan using the rules and places provided by the user.
     This is the spot where we decide what to scan. The called routine,
     scan_source() should bin
+
+    CREATE TABLE filelist (
+        filename VARCHAR(1000) NOT NULL
+        ,content_hash CHAR(32) NOT NULL
+        ,size INTEGER
+        ,modify_age float NOT NULL
+        ,access_age float NOT NULL
+        ,create_age float NOT NULL
+        ,score float DEFAULT 0);
 
     pargs -- The Namespace created by parsing command line options,
         but it could be any Namespace.
