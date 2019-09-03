@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="undeux",
-    version="0.9",
+    version="1.0",
     author="George Flanagin",
     author_email="me+undeux@georgeflanagin.com",
     description="Build database of files to find duplicates and old disc hogs.",

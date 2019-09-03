@@ -22,6 +22,46 @@ def undeux_help() -> int:
     `undeux` is a utility to find suspiciously similiar files that 
     may be duplicates.
 
+    There is a configuration file of the "Windows.ini" sort. It is 
+    delivered with the program. By default it looks like this:
+
+
+        [exclude]
+          small_file = 4096
+          big_file = 1<<28
+          hidden = yes
+          young_file = 30
+          links = yes
+
+        [general]
+          verbose = no
+          nice = 20
+          
+        [db]
+          type = sqlite
+          file = ~/undeux.db
+
+    Taking the options in order, undeux tries to provide useful default
+    values. For example, we want to exclude some files as a matter of 
+    general practice:
+
+        small_file -- They don't take up much space, and often they
+            are strewn around directories because they need to
+            be in particular locations. Files smaller than 4096 bytes
+            will be ignored.
+
+        big_file -- This is the "hog threshold." If a file this large
+            or larger has not been accessed in quite a while, then it
+            is a potential Bogarter of disc space.
+
+        hidden -- We usually don't want to evaluate hidden files, the
+            theory being that they are hidden for a reason.
+
+        young_file -- Files younger than 30 days are still in use? Maybe?
+
+        links -- Links can be confusing. We are going to treat them like
+            links rather than evaluating the things they link to.
+
     All the command line arguments have defaults. If you run the program
     with no arguments, you will be reading this help, just like you are
     right now. If you want to accept all the defaults, use the single
