@@ -36,18 +36,24 @@ class OuterBlock(Exception):
         Exception.__init__(self)
 
 
-def undeux(my_args:argparse.Namespace, my_config:dict, db:object) -> int:
+def undeux(my_args:argparse.Namespace, 
+            my_config:dict, 
+            db:object) -> int:
     """
-    This is it.
+    Function to find and record information about duplicate files.
     """
+    using_db = db is not None
 
-    os.nice(my_config['general']['nice'])
+    # Let's be at least a little nice.
+    os.nice(my_config['general'].get('nice', 10))
 
+    # Let's keep some stats to entertain the user after the fact.
     summary = dict.fromkeys([
         'total_files', 'unique_sizes', 
         'hashed_files', 'duplicated_files', 
         'wasted_space', 'biggest_waste'], 0)
 
+    # Bind up all this output into one channel. 
     with contextlib.redirect_stdout(sys.stderr):
         # 
         file_info = undeuxlib.scan_sources(my_args, my_config, db)

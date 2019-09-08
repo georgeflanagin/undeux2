@@ -99,7 +99,6 @@ def undeux_main() -> int:
     # [5]
     return undeux.undeux(my_args=my_args, my_config=my_config, db=db)
         
-    
 
     
 if __name__ == "__main__":
