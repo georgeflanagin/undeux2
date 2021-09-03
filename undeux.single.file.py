@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-#pragma pylint=off
-    
 # Credits
 __author__ =        'George Flanagin'
 __copyright__ =     'Copyright 2017 George Flanagin'
@@ -31,28 +29,9 @@ import sys
 import time
 from   urllib.parse import urlparse
 
-""" 
-Fname, a portable class for manipulating long, complex, and
-confusing path and file names on Linux and Windows.
-Experience has taught us that we make a lot of mistakes by placing
-files in the wrong directories, or getting mixed up over extensions.
-In the examples below, we will use the file name:
-
-       f = Fname('/home/data/import/big.file.dat')
-
-This is implemented a portable way, so the same logic will work
-on Windows NTFS for the above path written as:
-
-       \\home\data\import\big.file.dat
-
-This class supports all the comparison operators ( ==, !=, <, <=,
->, >= ) and when doing so it uses the fully qualifed name.
-"""
-
-
-
 class Fname:
     pass
+
 
 @total_ordering
 class Fname:
@@ -68,42 +47,38 @@ class Fname:
     """
 
     BUFSIZE = 65536 
-    __slots__ = [ '_me', '_is_URI', '_fqn', '_dir', '_fname',
-        '_fname_only', '_ext', '_all_but_ext', '_content_hash',
-        '_is_URI', '_lock_handle']
+    __slots__ = { 
+        '_me' : 'The name as it appears in the constructor', 
+        '_is_URI' : 'True or False based on containing a "scheme"', 
+        '_fqn' : 'Fully resolved name', 
+        '_dir' : 'Just the directory part of the name', 
+        '_fname' : 'Just the file and the extension',
+        '_fname_only' : 'No directory and no extension', 
+        '_ext' : 'Just the extension (if there is one)', 
+        '_all_but_ext' : 'The whole thing, minus any extension', 
+        '_len' : 'save the length',
+        '_content_hash' : 'hexdigit string representing the hash of the contents at last reading',
+        '_lock_handle' : 'an entry in the logical unit table.'
+        }
+
+    __values__ = ( None, False, '', '', '', '', '', -1, '', None )
+
+    __defaults__ = dict(zip(__slots__.keys(), __values__))
 
     def __init__(self, s:str):
         """ 
         Create an Fname from a string that is a file name or a well
         behaved URI. An Fname consists of several strings, each of which
         corresponds to one of the commonsense parts of the file name.
-        Members:
-            _me -- whatever you used to create the object.
-            _is_URI -- boolean
-            _fqn -- calculated full name
-            _dir -- just the directory part of the name
-            _fname -- the file and the extension
-            _fname_only -- no dir and no extension
-            _ext -- just the extension (if it has one)
-            _all_but_ext -- the complement of _ext
-            _content_hash -- hexdigit string representing the contents
-                the last time the file was read.
-            _lock_handle -- an entry in the logical unit table.
+
         Raises a ValueError if the argument is empty.
         """
 
         if not s or not isinstance(s, str): 
             raise ValueError('Cannot create empty Fname object.')
 
-        self._me = s
-        self._is_URI = False
-        self._fqn = ""
-        self._dir = ""
-        self._fname = ""
-        self._fname_only = ""
-        self._ext = ""
-        self._all_but_ext = ""
-        self._content_hash = ""
+        for k,v in Fname.__defaults__.items():
+            setattr(self, k, v)
 
         self._is_URI = True if "://" in s else False
         if self._is_URI and 'file://' in s:
@@ -111,11 +86,10 @@ class Fname:
             self._fqn = tup.path
         else:
             self._fqn = os.path.abspath(os.path.expandvars(os.path.expanduser(s)))
+
         self._dir, self._fname = os.path.split(self._fqn)
         self._fname_only, self._ext = os.path.splitext(self._fname)
         self._all_but_ext = self._dir + os.path.sep + self._fname_only
-
-        self._lock_handle = None
 
 
     def __bool__(self) -> bool:
@@ -132,16 +106,17 @@ class Fname:
 
     def __call__(self, new_content:str=None) -> Union[bytes, Fname]:
         """
-        Return the contents of the file as an str object.
+        Return the contents of the file as an str-like object, or
+        write new content.
         """
 
-        content = ""
-        if new_content is None:
+        content = b""
+        if bool(self) and new_content is None:
             with open(str(self), 'rb') as f:
                 content = f.read()
         else:
             with open(str(self), 'wb+') as f:
-                f.write(bytes(new_content))
+                f.write(new_content.encode('utf-8'))
             
         return content if new_content is None else self
         
@@ -152,7 +127,9 @@ class Fname:
         returns -- number of bytes in the file
         """
         if not self: return 0
-        else: return os.stat(str(self)).st_size
+        if self._len < 0: 
+            self._len = os.stat(str(self)).st_size
+        return self._len
 
 
     def __str__(self) -> str:
@@ -161,6 +138,10 @@ class Fname:
         str(f) =>> '/home/data/import/big.file.dat'
         """
 
+        return self._fqn
+
+
+    def __format__(self, x) -> str:
         return self._fqn
 
 
@@ -204,7 +185,7 @@ class Fname:
         if len(self) != len(other): return False
 
         # Gotta look at the contents. See if our hash is known.
-        if not len(self._content_hash): self()
+        if not self._content_hash: self()
             
         # Make sure the other object's hash is known.
         if not len(other._content_hash): other()
@@ -290,6 +271,18 @@ class Fname:
 
 
     @property
+    def empty(self) -> bool:
+        """
+        Check if the file is absent, inaccessible, or short and 
+        containing only whitespace.
+        """
+        try:
+            return len(self) < 3 or not len(f().strip())
+        except:
+            return False 
+
+
+    @property
     def ext(self) -> str:
         """ 
         returns: -- The extension, if any.
@@ -336,10 +329,10 @@ class Fname:
         Return the hash if it has already been calculated, otherwise
         calculate it and then return it. 
         """
-        if len(self._content_hash) > 0: 
+        if self._content_hash: 
             return self._content_hash
 
-        hasher = hashlib.md5()
+        hasher = hashlib.sha1()
 
         with open(str(self), 'rb') as f:
             while True:
@@ -422,25 +415,7 @@ class Fname:
             return True
         finally:
             self._lock_handle = None
-        
-
-def formatted_stack_trace(as_string: bool = False) -> list:
-    """
-    Generate some easy to read, tabular output. By default, you get
-    a list of lines, each of which represents an executed function
-    call in reverse temporal order.
-    """
-    exc_type, exc_value, exc_traceback = sys.exc_info()
-    this_trace = traceback.extract_tb(exc_traceback)
-    r = []
-
-    r.append("Stack trace" + "\n" + "-"*80)
-    for _ in this_trace:
-        r.append(", line ".join([str(_[0]), str(_[1])]) +
-            ", fcn <" + str(_[2]) + ">, context=>> " + str(_[3]))
-    r.append("="*30 + " End of Stack Trace " + "="*30)
-    return ["\n".join(r)] if as_string else r
-
+            
 
 def listify(x:Any) -> list:
     """ change a single element into a list containing that element, but
@@ -537,8 +512,6 @@ def tombstone(args=None) -> int:
     """
     ELAPSED_TIME = time.time() - START_TIME
     a = [now_as_string(" @ ") + " :: (", str(round(ELAPSED_TIME,3)), ")(" + str(os.getpid()) + ")"]
-    if args is None:
-        args=formatted_stack_trace(True)
     if isinstance(args, list):
         for _ in args:
             a.append(str(_))
