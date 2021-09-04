@@ -29,9 +29,7 @@ import sys
 import time
 from   urllib.parse import urlparse
 
-class Fname:
-    pass
-
+class Fname: pass
 
 @total_ordering
 class Fname:
@@ -222,14 +220,14 @@ class Fname:
 
         # 3: are we allowed to open the file?
         if not os.access(str(self), os.R_OK): 
-            print('No access to {}.'.format(str(self)))
+            print(f'No access to {str(self)}.')
             return None
 
         # 4: OK, we are allowed access, but can we open it? 
         try:
             fd = os.open(str(self), os.O_RDONLY)
         except Exception as e:
-            print('Cannot open {}, so it is busy.'.format(str(self)))
+            print(f'Cannot open {str(self)}, so it is busy.')
             return True
 
         # 5: Can we lock it?
@@ -237,7 +235,7 @@ class Fname:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         except BlockingIOError as e:
-            print('No lock available on {}, so it is busy'.format(str(self)))
+            print(f'No lock available on {str(self)}, so it is busy')
             rval = True
 
         except Exception as e:
@@ -245,7 +243,7 @@ class Fname:
             rval = None
 
         else:
-            print('{} is locked.'.format(str(self)))
+            print(f'{str(self)} is locked.')
             rval = False
 
         finally:
@@ -489,7 +487,7 @@ def show_args(pargs:object) -> None:
     opt_string = ""
     for _ in sorted(vars(pargs).items()):
         opt_string += " --"+ _[0].replace("_","-") + " " + str(_[1])
-    print(opt_string + "\n")    
+    print(f"{opt_string}\n")    
 
 
 def sloppy(o:object) -> objectify:
@@ -532,17 +530,17 @@ def undeux_help() -> int:
 
         undeux --just-do-it
 
-    If you are running without --just-do-it, then the program will pause
-    and ask you if it understood the options correctly. 
+    This will scan the directory referenced by the $HOME environment
+    variable. If you are running without --just-do-it, then the program 
+    will pause and ask you if it understood the options correctly. 
 
     undeux works by creating a score for each file that indicates the
     likelihood that it is a candidate for removal. The scoring is on
     the half open interval [0 .. 1), where zero indicates that the file
-    may not be removed, and values near 1 indicate that if you don't 
-    remove it fairly soon, WW III will break out somewhere near your
-    disc drive[s]. Most files are somewhere between.
+    may not be removed, and values near 1 indicate that the file is
+    large and not recently accessed.
 
-    To elaborate:
+    undeux tries to be intelligent:
 
     - Files that you cannot remove are given a zero, and not further
         incorporated into the removal logic. The same is true of a file
@@ -555,7 +553,7 @@ def undeux_help() -> int:
         file because if two files have different lengths, they 
         are obviously not the same file.
     
-    So if you have an ancient file, that is a duplicate of some other
+    If you have an ancient file, that is a duplicate of some other
     file, with the same name, somewhere on the same mount point, and it 
     is large and hasn't been accessed in a while, then its score
     may approach 1.0. This program will then produce a list of the worst
@@ -625,6 +623,11 @@ def undeux_help() -> int:
         duplicate small .conf files being present. The default value is
         4096.
 
+    --units
+        By default, file sizes are reported in bytes, and that can result
+        in large numbers that are difficult to read at a glance. Options
+        are G (gigabytes), M (megabytes), K (kilobytes), and X (automatic).
+
     --verbose
         Tell all.
 
@@ -636,8 +639,8 @@ def undeux_help() -> int:
         Define how new a file needs to be to be ignored from processing.
         The idea is that if you downloaded Apocalypse Now from Amazon only
         one week ago, then you probably want to keep this whale even 
-        though it is 50+GB.  The default is zero (0), which means to consider
-        even new files when looking for duplicates.
+        though it is 50+GB.  The default is zero (0), which means to 
+        consider even new files when looking for duplicates.
     """
 
     nicely_display(undeux_help.__doc__)
@@ -753,44 +756,44 @@ def scan_source(src:str, pargs:object) -> Dict[int, list]:
             continue
 
         if any(ex in root_dir for ex in pargs.exclude): 
-            tombstone('excluding files in {}'.format(root_dir))
+            tombstone(f'excluding files in {root_dir}')
             continue
 
-        tombstone('scanning {} files in {}'.format(len(files), root_dir))
+        tombstone(f'scanning {len(file)} files in {root_dir}')
 
         for f in files:
 
             stats = []
             k = os.path.join(root_dir, f)
             if any(ex in k for ex in pargs.exclude): 
-                if pargs.verbose: print("!xclud! {}".format(k))
+                if pargs.verbose: print(f"!xclud! {k}")
                 continue
 
             try:
                 data = stat_function(k)
             except PermissionError as e: 
                 # cannot stat it.
-                if pargs.verbose: print("!perms! {}".format(k))
+                if pargs.verbose: print(f"!perms! {k}")
                 continue
 
             if data.st_uid * data.st_gid == 0: 
                 # belongs to root in some way.
-                if pargs.verbose: print("!oroot! {}".format(k))
+                if pargs.verbose: print(f"!oroot! {k}")
                 continue 
 
             if data.st_size < pargs.small_file:     
                 # small file; why worry?
-                if pargs.verbose: print("!small! {}".format(k))
+                if pargs.verbose: print(f"!small! {k}")
                 continue
 
             if data.st_uid != my_uid:
                 # Not even my file.
-                if pargs.verbose: print("!del  ! {}".format(k))
+                if pargs.verbose: print(f"!del  ! {k}")
                 continue  # cannot remove it.
 
             if start_time - data.st_ctime < pargs.young_file:
                 # If it is new, we must need it.
-                if pargs.verbose: print("!young! {}".format(k))
+                if pargs.verbose: print(f"!young! {k}")
                 continue
 
             # Realizing that a file's name may have multiple valid
@@ -828,10 +831,10 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
         for folder in [ os.path.expanduser(os.path.expandvars(_)) 
                 for _ in folders if _ ]:
             if '/.' in folder and not pargs.include_hidden: 
-                print('skipping {}'.format(folder))
+                print(f'skipping {folder}')
                 continue
             if any(ex in folder for ex in pargs.exclude): 
-                print('excluded {} skipped.'.format(folder))
+                print(f'excluded {folder} skipped.')
                 continue
 
             oed << scan_source(folder, pargs)
@@ -841,7 +844,7 @@ def scan_sources(pargs:object) -> Dict[int, List[tuple]]:
         pass
 
     except Exception as e:
-        tombstone('major problem. {}'.format(e))
+        tombstone(f'major problem. {e=}')
         print(formatted_stack_trace())
 
     return oed
@@ -900,6 +903,9 @@ def undeux_main() -> int:
     parser.add_argument('--small-file', type=int, default=resource.getpagesize()+1,
         help="files less than this size (default {}) are not evaluated.".format(resource.getpagesize()+1))
 
+    parser.add_argument('--units', type=str, default="B", choices=('B', 'G', 'K', 'M', 'X'),
+        help="file sizes are in bytes by default. Report them in K, M, G, or X (auto scale), instead")
+
     parser.add_argument('--verbose', action='store_true',
         help="go into way too much detail.")
 
@@ -939,8 +945,8 @@ def undeux_main() -> int:
     show_args(pargs)
 
     if pargs.version:
-        print('UnDeux (c) 2019. George Flanagin and Associates.')
-        print('  Version of {}'.format(datetime.utcfromtimestamp(os.stat(__file__).st_mtime)))
+        print('UnDeux (c) 2021. George Flanagin and Associates.')
+        print(f'  Version of {datetime.utcfromtimestamp(os.stat(__file__).st_mtime)}')
         return os.EX_OK
 
     # Get a little confirmation be continuing unless we have been told to 
@@ -949,6 +955,7 @@ def undeux_main() -> int:
         try:
             r = input('\nDoes this look right to you? ')
             if r.lower() not in "yes": sys.exit(os.EX_CONFIG)
+
         except KeyboardInterrupt as e:
             print('\nApparently it does not look right. Exiting via control-C')
             sys.exit(os.EX_CONFIG)
@@ -967,7 +974,7 @@ def undeux_main() -> int:
         summary.total_files = len(file_info)
 
         hashes = collections.defaultdict(list)
-        print("examining {} items".format(summary.total_files))
+        print(f"examining {summary.total_files} items")
 
         # NOTE: if you want to change the way the scoring operates,
         # this is the place to do it. The Scorer.__init__ function
@@ -989,23 +996,27 @@ def undeux_main() -> int:
 
                     # Things get interesting.
                     if pargs.verbose: 
-                        print("checking {} possible duplicates matching {}".format(len(v), k))
+                        print(f"checking {len(v)} possible duplicates matching {k}")
                     for t in v:
                         try:
                             f = Fname(t)
-                            stats = os.stat(str(f))
+                            stats = os.stat(str(f), 
+                                follow_symlinks=pargs.follow_links)
+
                             my_stats = [stats.st_size,
                                 int(now-stats.st_ctime), 
                                 int(now-stats.st_mtime), 
-                                int(now-stats.st_atime + 1)]
+                                int(now-stats.st_atime + 1),
+                                stats.st_ino,
+                                stats.st_nlink]
 
                             # For convenience, Scorer.__call__ is the appropriate
                             # way to evaluate the score.
-                            ugliness = scorer(*my_stats)
+                            ugliness = scorer(*my_stats[:4])
                             
                             if (pargs.big_file and (k > pargs.big_file)
                                     and (pargs.verbose or pargs.hogs)): 
-                                print("hashing large file: {}".format(str(f)))
+                                print(f"hashing large file: {str(f)}")
 
                             # Put the ugliness first in the tuple for ease of
                             # sorting by most ugly first. 
@@ -1054,9 +1065,9 @@ def undeux_main() -> int:
                 if waste > summary.biggest_waste: summary.biggest_waste = waste
 
                 target = v[0][1]
-                if pargs.verbose: print("{} -> {}".format(target, i, v))
+                if pargs.verbose: print(f"{target} -> {i} {v}")
                 for vv in v:
-                    print("{}".format(vv))
+                    print("{vv}")
                 print(80*'-')
 
             except KeyboardInterrupt as e:
