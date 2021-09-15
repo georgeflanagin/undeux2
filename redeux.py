@@ -107,9 +107,9 @@ class AbstractSigmoid:
         """
         if not AbstractSigmoid.call_keys == set(kwargs):
             return 0
-        unused = self.scalefcn(self.now - kwargs['atime'])
-        unmodded = self.scalefcn(self.now - kwargs['mtime'])
-        age = self.scalefcn(self.now - kwargs['ctime'])
+        unused = self.scalefcn(kwargs['atime'])
+        unmodded = self.scalefcn(kwargs['mtime'])
+        age = self.scalefcn(kwargs['ctime'])
         size = self.scalefcn(kwargs['size'])
         total = sum((unused, unmodded, age, size))
 
@@ -117,6 +117,24 @@ class AbstractSigmoid:
             (math.exp(-self.incline*(total-self.midpoint)) +1),
             self.rounding)
 
+
+def dups_by_hash(filelist:list, outfile:object) -> list:
+    """
+    Calculate the hash of each file in the list of file names.
+    Create a dict where the hash is the key, and report the 
+    cases where more than one file matches.
+    """
+    temp_d = collections.defaultdict(list)
+    for f in filelist:
+        temp_d[fname.Fname(f).hash].append(f)
+
+    for k, v in temp_d.items():
+        if len(v) > 1:
+            outfile.write(f"{tuple(v)}\n")
+
+    return temp_d if len(temp_d) else {}
+
+    
 
 def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
     """
@@ -158,8 +176,10 @@ def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
 
 def redeux_main(pargs:argparse.Namespace) -> int:
 
-    global inode_to_filename, finfo_tree, dups_by_size
+    global inode_to_filename, finfo_tree, dups_by_size, start_time
     scorer = AbstractSigmoid()
+
+    outfile = open(pargs.output, 'w')
 
     # Use a generator to collect the files.
     for i, f in enumerate(fileutils.all_files_in(pargs.dir)):
@@ -186,10 +206,10 @@ def redeux_main(pargs:argparse.Namespace) -> int:
         dups_by_size[finfo[0]].append(f)
         finfo_tree[f].inode = finfo[3]
         finfo_tree[f].size = finfo[0]
-        finfo_tree[f].mtime = finfo[1]
-        finfo_tree[f].atime = finfo[2]
+        finfo_tree[f].mtime = start_time - finfo[1]
+        finfo_tree[f].atime = start_time - finfo[2]
         finfo_tree[f].nlinks = finfo[4]
-        finfo_tree[f].ctime = finfo[5]
+        finfo_tree[f].ctime = start_time - finfo[5]
 
     #######################################################
     # A million files later (perhaps), we are finally here.
@@ -206,9 +226,11 @@ def redeux_main(pargs:argparse.Namespace) -> int:
         if len(filelist) == 1:
             f = filelist[0]
             finfo_tree[f].unique = True
-        else:
+        elif (dups := dups_by_hash(filelist, outfile)):
             finfo_tree[f].unique = False
-            finfo_tree[f].dups = tuple(filelist.keys())
+            finfo_tree[f].dups = dups.values()
+        else:
+            finfo_tree[filelist[0]].unique = True
             
     del dups_by_size
     gc.collect()
@@ -242,13 +264,15 @@ def redeux_main(pargs:argparse.Namespace) -> int:
     ########################################################
     for f, data in finfo_tree.items():
         finfo_tree[f].ugliness = scorer(
-            size=data.size, mtime=data.mtime, ctime=data.ctime, atime=data.atime
+            size=data.size, 
+            mtime=data.mtime, ctime=data.ctime, atime=data.atime
             )  
 
-    ktypes = {0:"leaf", 1:"node"}
+    # ktypes = {0:"leaf", 1:"node"}
+    # for k, k_type in finfo_tree.traverse():
+    #     print(f"{k} is a {ktypes[k_type]}")
 
-    for k, k_type in finfo_tree.traverse():
-        print(f"{k} is a {ktypes[k_type]}")
+    pargs.verbose and not pargs.quiet and print(finfo_tree)
 
     return os.EX_OK
 
@@ -294,6 +318,9 @@ if __name__ == "__main__":
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
 
+    parser.add_argument('-o', '--output', type=str, default="duplicatefiles.out",
+        help="Output file with the duplicates named")
+
     parser.add_argument('--quiet', action='store_true',
         help="eliminates narrative while running.")
 
@@ -317,5 +344,12 @@ if __name__ == "__main__":
 
     pargs = parser.parse_args()
     dump_cmdline(pargs)
+    if not pargs.just_do_it: 
+        try:
+            r = input("Does this look right to you? ")
+            if r.lower() not in "yes": sys.exit(os.EX_CONFIG)
+        except KeyboardInterrupt as e:
+            print("Apparently it does not. Exiting.")
+            sys.exit(os.EX_CONFIG)
 
     sys.exit(redeux_main(pargs))
