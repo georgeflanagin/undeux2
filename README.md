@@ -8,14 +8,20 @@ Table of contents:
 ## Summary
 
 `undeux` is a utility to find suspiciously similiar files that
-may be duplicates.
+may be duplicates, and optionally to identify files that are old
+and large, a.k.a., hogs.
 
 All the command line arguments have defaults. If you run the program
 with no arguments, you will be reading the help, just like you are
 right now. If you want to accept all the defaults, use the single
 argument:
 
-    undeux --just-do-it
+```bash
+undeux --just-do-it
+```
+
+This is not a recommended option until you understand how the 
+program works, and that's the topic of the next section.
 
 ### How `undeux` works
 
@@ -26,32 +32,37 @@ is a list of file names with that size.
 
 The next step is to process the "hash table," and calculate the 
 MD5 sums for each file of a given size, provided there is more than
-one file of that size. Certain exclusions may apply; see the section
-on `--big-file`.
+one file of that size. *Certain exclusions may apply; see the section
+on `--big-file`.*
 
 `undeux` works by creating a score for each file that indicates the
 likelihood that it is a candidate for removal. The scoring is on
 the half open interval `[0 .. 1)`, where zero indicates that the file
 may not be removed, and values near 1 indicate that if you don't
-remove it fairly soon, WW III will break out somewhere near your
-disc drive[s]. Fortunately, most files are somewhere between.
+remove it fairly soon, your quota will be exceeded.
 
 To elaborate:
 
 - Files that you cannot remove are given a zero, and not further
     incorporated into the removal logic. The same is true of a file
     that is too new, or too small.
-- Files are penalized for not having been accessed in a long time.
+- Files are penalized for not having been accessed in a long time,
+    particularly so for files whose last access is near the time 
+    of creation. Modification is not considered because not all
+    files are written to, and not all file systems keep several
+    dates.
 - Files that are large are penalized.
+- Files that are duplicates have their scores multiplied by the
+    number of copies found.
 - Files are reported if their contents exactly match another
     file. This is the final step. There is no need to hash every
     file because if two files have different lengths, they
     are obviously not the same file.
 
-So if you have an ancient file, that is a duplicate of some other
+So if you have an ancient file that is a duplicate of some other
 file, with the same name, somewhere on the same mount point, and it
 is large and hasn't been accessed in a while, then its score
-may approach 1.0. This program will then produce a list of the
+may approach N, where N is the number of copies. This program will then produce a list of the
 offenders.
 
 Through the options below, you will have a lot of control over
@@ -67,11 +78,7 @@ through this help a second time, or write to me at this address:
 
 ### Dependencies
 
-This project is built on another of my github projects, namely
-[gkflib](git@github.com:georgeflanagin/gkflib.git), and it depends
-on a few PyPi libraries that are pip-installable. For the Python noobs
-and neolates, this repo has a single file version of the program
-that appears to have all the dependencies resolved.
+This project requires that `hpclib` be in the `PYTHONPATH`.
 
 ### Command line switches
 
