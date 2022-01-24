@@ -42,7 +42,6 @@ from   urllib.parse import urlparse
 # From HPCLIB
 #####################################
 
-import dorunrun
 import fileutils
 import fname
 import linuxutils
