@@ -78,7 +78,15 @@ by_hash     = collections.defaultdict(list)
 finfo_tree  = SloppyTree()
 
 redeux_help = """
-    Let's provide more info on a few of the key arguments.
+    Let's provide more info on a few of the key arguments and the
+        display while the program runs.
+
+    .  :: Unless you are running --quiet, the program will display
+        a period for every 1000 files that are "stat-ed" when the
+        directory is being browsed.
+
+    +  :: Hashing is shown with a + for every 100 files that are 
+        hashed. 
 
     --exclude :: This parameter can be used multiple times. Remember
         that hidden files will not require an explicit exclusion in 
@@ -87,6 +95,11 @@ redeux_help = """
         fully qualified name will be excluded. If you type
         "--exclude /private", then any file in any directory that
         begins with "private" will be excluded.
+
+        Given that one may want to run this program as root, redeux
+        will always ignore files that are owned by root, as well as
+        files in the top level directories like /dev, /proc, /mnt, 
+        /sys, /boot, and /var.
 
     --include-hidden :: This switch is generally off, and hidden files
         will be excluded. They are often part of a git repo, or a part
@@ -223,13 +236,15 @@ def redeux_main(pargs:argparse.Namespace) -> int:
     global inode_to_filename, finfo_tree, dups_by_size, start_time
     outfile = open(pargs.output, 'w')
 
+    pargs.exclude.extend(['/proc/', '/dev/', '/mnt/', '/sys/', '/boot/', '/var/'])
+
     ############################################################
     # Use the generator to collect the files so that we do not
     # build a useless list in memory. 
     ############################################################
     sys.stderr.write(f"Looking at files in {pargs.dir}\n")
     for i, f in enumerate(fileutils.all_files_in(pargs.dir, pargs.include_hidden)):
-        if i % 1000 == 0: 
+        if not pargs.quiet and not i % 1000: 
             sys.stderr.write('.')
             sys.stderr.flush()
         if i > pargs.limit: break
