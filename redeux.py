@@ -36,6 +36,7 @@ import pwd
 import resource
 import shutil
 import time
+import textwrap
 from   urllib.parse import urlparse
 
 #####################################
@@ -57,23 +58,63 @@ from   sloppytree import SloppyTree
 ####
 # To look for pseudo duplicates that are actually hard links.
 ####
-inode_to_filename = SloppyTree()
+by_inode    = collections.defaultdict(list)
+
+####
+# To look for files that are the same size
+####
+by_size     = collections.defaultdict(list)
+
+####
+# For files that are the same size, we check the hashes.
+####
+by_hash     = collections.defaultdict(list)
 
 ####
 # The keys are the filenames, and the values are the info
 # about each file. Using SloppyTree instead of dict allows
 # us to directly instantiate the info about each file.
 ####
-finfo_tree        = SloppyTree()
+finfo_tree  = SloppyTree()
 
-####
-# The keys are the sizes, and the values are the filenames.
-dups_by_size      = collections.defaultdict(list)
+redeux_help = """
+    Let's provide more info on a few of the key arguments.
 
+    --exclude :: This parameter can be used multiple times. Remember
+        that hidden files will not require an explicit exclusion in 
+        most cases. Simple pattern matching is used, so if you put
+        in "--exclude A", then any file with a "A" any where in its
+        fully qualified name will be excluded. If you type
+        "--exclude /private", then any file in any directory that
+        begins with "private" will be excluded.
 
-###
-# For determining age of files.
-start_time = 0
+    --include-hidden :: This switch is generally off, and hidden files
+        will be excluded. They are often part of a git repo, or a part
+        of some program's cache. Why bother? 
+
+    --small-file :: Some programs create hundreds or thousands of very
+        small files. Many may be short lived duplicates. The default value
+        of 4097 bytes means that a file must be at least that large
+        to even figure into our calculus.
+
+    --young-file :: The value is in days, so if a long calculation is
+        running, then we may want to exclude files that are younger
+        than the time it has been running. The files are in use, and
+        if they are duplicates, then there is probably a reason.
+    
+    """
+
+class StatName(enum.IntEnum):
+    """
+    Give these stats some clean names.
+    """
+    SIZE = 0
+    MODTIME = 1
+    ACCESSTIME = 2
+    INODE = 3
+    LINKCOUNT = 4
+    CREATETIME = 5
+
 
 def loglog(x:float) -> float:
     return math.log(math.log(x))
@@ -137,42 +178,6 @@ class AbstractSigmoid:
 
 scorer = AbstractSigmoid()
 
-def dups_by_hash(filesize:int, 
-        filelist:list, 
-        outfile:object, 
-        unit_size:str,
-        big_file:int) -> list:
-    """
-    Calculate the hash of each file in the list of file names.
-    Create a dict where the hash is the key, and report the 
-    cases where more than one file matches.
-
-    filesize -- this is the size of all the files in filelist.
-    filelist -- a list of files that are all the same size.
-    outfile -- a place to write the info.
-    big_file -- If the size of the file is greater than this, 
-        assume the files are the same without doing a hash.
-    """
-    temp_d = collections.defaultdict(list)
-
-    if filesize > big_file:
-        # Assume they are the same file without hashing. Give
-        # it a hash value of None, meaning we did not hash them.
-        temp_d[None] = filelist
-    else:
-        # Build a table with the hash as a key and a list of files
-        # as the value.
-        for f in filelist:
-            temp_d[fname.Fname(f).hash].append(f)
-
-        # We are only interested in the lists of files that are longer
-        # than one.
-        temp_d = {k:v for k,v in temp_d.items() if len(v) > 1}
-
-    writelines(outfile, unit_size, filesize, temp_d)
-    return temp_d
-
-
 def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
     """
     Return a tuple of the "interesting" stats.
@@ -196,11 +201,6 @@ def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
         pargs.verbose and print(f"!small! {f}")
         return None
 
-    # If it is not my file and I cannot modify it, skip it.
-    if not os.access(f, os.W_OK):
-        pargs.verbose and print(f"!del  ! {f}")
-        return None  # cannot remove it.
-
     # If it is new, we must need it.
     if start_time - data.st_ctime < pargs.young_file:
         pargs.verbose and print(f"!young! {f}")
@@ -218,36 +218,20 @@ def tprint(s:str) -> None:
     print(f"{e} : {s}")
 
 
-def writelines(outfile:object, unit_size:str, filesize:int, d:dict) -> None:
-    global scorer
-    filesize = linuxutils.byte_scale(filesize, unit_size)
-    for k, v in d.items():
-        k = "hashed" if k else "probable" 
-        outfile.write(f"{filesize},{scorer.ugliness(v[0])},{k},{tuple(v)}\n")
-        
-    
-class StatName(enum.IntEnum):
-    """
-    Give these stats some clean names.
-    """
-    SIZE = 0
-    MODTIME = 1
-    ACCESSTIME = 2
-    INODE = 3
-    LINKCOUNT = 4
-    CREATETIME = 5
-
-
 def redeux_main(pargs:argparse.Namespace) -> int:
 
     global inode_to_filename, finfo_tree, dups_by_size, start_time
     outfile = open(pargs.output, 'w')
 
     ############################################################
-    # Use a generator to collect the files so that we do not
+    # Use the generator to collect the files so that we do not
     # build a useless list in memory. 
     ############################################################
+    sys.stderr.write(f"Looking at files in {pargs.dir}\n")
     for i, f in enumerate(fileutils.all_files_in(pargs.dir, pargs.include_hidden)):
+        if i % 1000 == 0: 
+            sys.stderr.write('.')
+            sys.stderr.flush()
         if i > pargs.limit: break
 
         ######################################################
@@ -261,93 +245,65 @@ def redeux_main(pargs:argparse.Namespace) -> int:
         if (finfo := stats_of_interest(f, pargs)) is None: continue           
 
         ######################################################
-        # Load it in the data structures. The inode mapping is
-        # done programmaticqlly because Linux has no way to map
-        # inodes to filenames; i.e., you cannot search for "all
-        # the filenames that have this inode," so we have to
-        # write it ourselves.
+        # Load it in the data structures.
         ######################################################
-        inode_to_filename[finfo[StatName.INODE]][f]
-        dups_by_size[finfo[StatName.SIZE]].append(f)
-        finfo_tree[f].inode = finfo[StatName.INODE]
         finfo_tree[f].size = finfo[StatName.SIZE]
-        finfo_tree[f].mtime = start_time - finfo[StatName.MODTIME]
-        finfo_tree[f].atime = start_time - finfo[StatName.ACCESSTIME]
-        finfo_tree[f].nlinks = finfo[StatName.LINKCOUNT]
-        finfo_tree[f].ctime = start_time - finfo[StatName.CREATETIME]
-        finfo_tree[f].dups = None
+        finfo_tree[f].inode = finfo[StatName.INODE]
+        by_size[finfo[StatName.SIZE]].append(f)
+        if finfo[StatName.LINKCOUNT] > 1: by_inode[finfo[StatName.INODE]].append(f)
 
-    #######################################################
-    # A million files later (perhaps), we are finally here.
-    #######################################################
-    tprint(f"{i} files considered.")
-    tprint(f"{len(dups_by_size)} files qualify for additional evaluation.")
+    sys.stderr.write(f"\n{i+1} files were discovered.\n")
+    sys.stderr.write(f"{len(by_inode.keys())} hard links.\n")
+    sys.stderr.write(f"{len(finfo_tree.keys())} files to be further considered.\n")
 
-    #######################################################
-    # Next step: eliminate all the files that have a unique
-    #   size. Essentially we will merge the dups into the
-    #   finfo_tree structure, and then release the memory
-    #   for the dups tree.
-    #######################################################
-    potential_dups = {size:filelist 
-        for size, filelist in dups_by_size.items() 
-        if len(filelist) > 1}
-    tprint(f"{len(potential_dups)} possible tuples of duplicates.")
+    size_dups = {size:filelist for size, filelist in by_size.items() if len(filelist) > 1}
+    sys.stderr.write(f"{len(size_dups)} potential groups to consider. Hashing ...\n")
+    try:
+        for i, datum in enumerate(size_dups.items()):
+            if i % 100 == 0: 
+                sys.stderr.write('+')
+                sys.stderr.flush()
 
-    n_dups = 0
-    for i, datum in enumerate(potential_dups.items()):
-        # Show the user that we are working.
-        if pargs.verbose and not i % 100: print(f"{i}\r")
-        size, filelist = datum
-        if (dups := dups_by_hash(size, filelist, outfile, pargs.units, pargs.big_file)):
-            finfo_tree[f].dups = dups.values()
-            n_dups += 1
+            size, filelist = datum
+            for f in filelist:
+                if finfo_tree[f].inode in by_inode: continue
+                f = fname.Fname(f)
+                if size > pargs.big_file: 
+                    by_hash[size].append(str(f))
+                else:        
+                    by_hash[f.hash].append(str(f))
+    except KeyboardInterrupt as e:
+        pass
 
-    tprint(f"{n_dups} duplicate files identified.")
-    del dups_by_size
-    gc.collect()
+    true_duplicates = {hash:filelist for hash, filelist in by_hash.items() if len(filelist) > 1}
+    print(f"\n{len(true_duplicates)} true duplicates found. Writing list to {pargs.output}\n")
 
-    #######################################################
-    # Now we walk the inodes to see if there are any false
-    # duplicates that we can skip in processing. If so,
-    # we will eliminate them from consideration because it
-    # is clear that someone is consciously conserving space
-    # for a file known to be important.
-    #######################################################
-    hard_links = {}
-    for k, v in inode_to_filename.items():
-        if len(v) > 1: hard_links[k] = v
-    
-    del inode_to_filename
-    gc.collect()
+    d = {}
+    for filelist in true_duplicates.values():
+        # We know the size is the same for all elements of the list, so
+        # we can just take the first size.
+        d[os.stat(filelist[0]).st_size] = filelist
 
-    #######################################################
-    # Keep only one of the filenames associated with the
-    # inodes that are duplicated.
-    #######################################################
-    for k, v in hard_links.items():
-        for i, f in enumerate(v):
-            if not i: continue
-            finfo_tree.pop(f)
-
-    # ktypes = {0:"leaf", 1:"node"}
-    # for k, k_type in finfo_tree.traverse():
-    #     print(f"{k} is a {ktypes[k_type]}")
-
-    pargs.verbose and not pargs.quiet and print(finfo_tree)
-
+    with open(pargs.output, 'w') as outfile:
+        for k in sorted(d, reverse=True):
+            outfile.write(f"{k} : {d[k]}\n")
+        
     return os.EX_OK
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='REDEUX: Find probable duplicate files.')
+    parser = argparse.ArgumentParser(prog='redeux',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(redeux_help),
+        description='redeux: Find probable duplicate files.')
 
     parser.add_argument('-?', '--explain', action='store_true')
 
     parser.add_argument('--big-file', type=int, 
-        default=1<<20,
+        default=1<<24,
         help="""A file larger than this value is *big* enough it has a 
-high probability of being a dup of a file the same size.""")
+high probability of being a dup of a file the same size,
+so we just assume it is a duplicate.""")
 
     parser.add_argument('--dir', type=str, 
         default=fileutils.expandall("$HOME"),
@@ -362,10 +318,6 @@ high probability of being a dup of a file the same size.""")
 
     parser.add_argument('--include-hidden', action='store_true',
         help="search hidden directories as well.")
-
-    # parser.add_argument('--link-dir', type=str, 
-    #     default=None,
-    #     help="if present, we will create symlinks to the older files in this dir.")
 
     parser.add_argument('--just-do-it', action='store_true',
         help="run the program using the defaults.")
