@@ -43,6 +43,7 @@ from   urllib.parse import urlparse
 # From HPCLIB
 #####################################
 
+from   dorunrun import dorunrun, ExitCode
 import fileutils
 import fname
 import linuxutils
@@ -87,6 +88,13 @@ redeux_help = """
 
     +  :: Hashing is shown with a + for every 100 files that are 
         hashed. 
+
+    --big-file :: Files larger than this are computationally intensive
+        to hash. YMMV, so this value is up to you. Often, if there is
+        a difference between two large files with the same size, the 
+        differences are in the final bytes or the first few. Before 
+        these files are hashed, redeux will check the ends of the file 
+        for ordinary differences.
 
     --exclude :: This parameter can be used multiple times. Remember
         that hidden files will not require an explicit exclusion in 
@@ -224,6 +232,16 @@ def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
             data.st_ino, data.st_nlink, data.st_ctime )
 
 
+def edgehash(filename:str) -> str:
+    hasher = hashlib.sha1()
+    with open(filename, 'rb') as f:
+        # hasher.update(f.read(4096))
+        f.seek(-4096, os.SEEK_END)
+        hasher.update(f.read())
+
+    return 'X' + hasher.hexdigest()[1:]
+
+
 def tprint(s:str) -> None:
     global start_time
 
@@ -236,36 +254,40 @@ def redeux_main(pargs:argparse.Namespace) -> int:
     global inode_to_filename, finfo_tree, dups_by_size, start_time
     outfile = open(pargs.output, 'w')
 
-    pargs.exclude.extend(['/proc/', '/dev/', '/mnt/', '/sys/', '/boot/', '/var/'])
+    pargs.exclude.extend(('/proc/', '/dev/', '/mnt/', '/sys/', '/boot/', '/var/'))
 
     ############################################################
     # Use the generator to collect the files so that we do not
     # build a useless list in memory. 
     ############################################################
     sys.stderr.write(f"Looking at files in {pargs.dir}\n")
-    for i, f in enumerate(fileutils.all_files_in(pargs.dir, pargs.include_hidden)):
-        if not pargs.quiet and not i % 1000: 
-            sys.stderr.write('.')
-            sys.stderr.flush()
-        if i > pargs.limit: break
+    try:
+        for i, f in enumerate(fileutils.all_files_in(pargs.dir, pargs.include_hidden)):
+            if not pargs.quiet and not i % 1000: 
+                sys.stderr.write('.')
+                sys.stderr.flush()
+            if i > pargs.limit: break
 
-        ######################################################
-        # 1. Is it something the user wants to exclude?
-        # 2. Is it a symlink that we are not following?
-        # 3. Is it qualified after stat-ing it?
-        ######################################################
+            ######################################################
+            # 1. Is it something the user wants to exclude?
+            # 2. Is it a symlink that we are not following?
+            # 3. Is it qualified after stat-ing it?
+            ######################################################
 
-        if pargs.exclude and any(_ in f for _ in pargs.exclude): continue 
-        if not pargs.follow_links and os.path.islink(f): continue
-        if (finfo := stats_of_interest(f, pargs)) is None: continue           
+            if pargs.exclude and any(_ in f for _ in pargs.exclude): continue 
+            if not pargs.follow_links and os.path.islink(f): continue
+            if (finfo := stats_of_interest(f, pargs)) is None: continue           
 
-        ######################################################
-        # Load it in the data structures.
-        ######################################################
-        finfo_tree[f].size = finfo[StatName.SIZE]
-        finfo_tree[f].inode = finfo[StatName.INODE]
-        by_size[finfo[StatName.SIZE]].append(f)
-        if finfo[StatName.LINKCOUNT] > 1: by_inode[finfo[StatName.INODE]].append(f)
+            ######################################################
+            # Load it in the data structures.
+            ######################################################
+            finfo_tree[f].size = finfo[StatName.SIZE]
+            finfo_tree[f].inode = finfo[StatName.INODE]
+            by_size[finfo[StatName.SIZE]].append(f)
+            if finfo[StatName.LINKCOUNT] > 1: by_inode[finfo[StatName.INODE]].append(f)
+
+    except KeyboardInterrupt as e:
+        pass
 
     sys.stderr.write(f"\n{i+1} files were discovered.\n")
     sys.stderr.write(f"{len(by_inode.keys())} hard links.\n")
@@ -273,6 +295,7 @@ def redeux_main(pargs:argparse.Namespace) -> int:
 
     size_dups = {size:filelist for size, filelist in by_size.items() if len(filelist) > 1}
     sys.stderr.write(f"{len(size_dups)} potential groups to consider. Hashing ...\n")
+
     try:
         for i, datum in enumerate(size_dups.items()):
             if i % 100 == 0: 
@@ -284,9 +307,10 @@ def redeux_main(pargs:argparse.Namespace) -> int:
                 if finfo_tree[f].inode in by_inode: continue
                 f = fname.Fname(f)
                 if size > pargs.big_file: 
-                    by_hash[size].append(str(f))
+                    by_hash[edgehash(str(f))].append(str(f))
                 else:        
                     by_hash[f.hash].append(str(f))
+
     except KeyboardInterrupt as e:
         pass
 
@@ -294,10 +318,13 @@ def redeux_main(pargs:argparse.Namespace) -> int:
     print(f"\n{len(true_duplicates)} true duplicates found. Writing list to {pargs.output}\n")
 
     d = {}
-    for filelist in true_duplicates.values():
+    for hash, filelist in true_duplicates.items():
         # We know the size is the same for all elements of the list, so
         # we can just take the first size.
-        d[os.stat(filelist[0]).st_size] = filelist
+        if hash.startswith('X'):
+            d[os.stat(filelist[0]).st_size] = tuple(('X', *filelist))
+        else:
+            d[os.stat(filelist[0]).st_size] = tuple(filelist)
 
     with open(pargs.output, 'w') as outfile:
         for k in sorted(d, reverse=True):
@@ -315,7 +342,7 @@ if __name__ == "__main__":
     parser.add_argument('-?', '--explain', action='store_true')
 
     parser.add_argument('--big-file', type=int, 
-        default=1<<24,
+        default=1<<20,
         help="""A file larger than this value is *big* enough it has a 
 high probability of being a dup of a file the same size,
 so we just assume it is a duplicate.""")
