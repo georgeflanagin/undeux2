@@ -1,5 +1,0 @@
-fname>=0.6
-gkflib>=2.1
-sqlitedb>=1.0
-sortedcontainers>=2.0.4
-
