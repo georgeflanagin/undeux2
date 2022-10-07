@@ -25,19 +25,14 @@ from   typing import *
 import argparse
 import collections
 import contextlib
-from   datetime import datetime
 import enum
-import fcntl
-from   functools import total_ordering
-import gc
+import getpass
 import hashlib
 import math
 import pwd
 import resource
-import shutil
 import time
 import textwrap
-from   urllib.parse import urlparse
 
 #####################################
 # From HPCLIB
@@ -77,6 +72,11 @@ by_hash     = collections.defaultdict(list)
 # us to directly instantiate the info about each file.
 ####
 finfo_tree  = SloppyTree()
+
+# To support --owner-only, we need to know who is running
+# the program.
+me = getpass.getuser()
+my_uid = pwd.getpwnam(me).pw_uid
 
 redeux_help = """
     Let's provide more info on a few of the key arguments and the
@@ -204,12 +204,18 @@ def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
     Return a tuple of the "interesting" stats.
     """
     global start_time
+    global my_uid
 
     try:
         data = os.stat(f)
     except PermissionError as e: 
         # cannot stat it.
         pargs.verbose and print(f"!perms! {f}")
+        return None
+
+    # If we are in owner only, is this even my file?
+    if pargs.owner_only and my_uid - data.st_uid:
+        parse.verbose and print(f"!~mine! {f}")
         return None
 
     # Does it belong to root? 
@@ -232,27 +238,14 @@ def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
             data.st_ino, data.st_nlink, data.st_ctime )
 
 
-def edgehash(filename:str) -> str:
-    hasher = hashlib.sha1()
-    with open(filename, 'rb') as f:
-        # hasher.update(f.read(4096))
-        f.seek(-4096, os.SEEK_END)
-        hasher.update(f.read())
-
-    return 'X' + hasher.hexdigest()[1:]
-
-
-def tprint(s:str) -> None:
-    global start_time
-
-    e = round(time.time() - start_time, 3)
-    print(f"{e} : {s}")
-
-
 def redeux_main(pargs:argparse.Namespace) -> int:
 
     global inode_to_filename, finfo_tree, dups_by_size, start_time
     outfile = open(pargs.output, 'w')
+
+    if not os.path.isdir(pargs.dir):
+        sys.stderr.write(f"{pargs.dir} not found\n")
+        sys.exit(os.EX_CONFIG)
 
     pargs.exclude.extend(('/proc/', '/dev/', '/mnt/', '/sys/', '/boot/', '/var/'))
 
@@ -261,6 +254,7 @@ def redeux_main(pargs:argparse.Namespace) -> int:
     # build a useless list in memory. 
     ############################################################
     sys.stderr.write(f"Looking at files in {pargs.dir}\n")
+    i = 0
     try:
         for i, f in enumerate(fileutils.all_files_in(pargs.dir, pargs.include_hidden)):
             if not pargs.quiet and not i % 1000: 
@@ -294,9 +288,13 @@ def redeux_main(pargs:argparse.Namespace) -> int:
     sys.stderr.write(f"{len(finfo_tree.keys())} files to be further considered.\n")
 
     size_dups = {size:filelist for size, filelist in by_size.items() if len(filelist) > 1}
-    sys.stderr.write(f"{len(size_dups)} potential groups to consider. Hashing ...\n")
+    sys.stderr.write(f"{len(size_dups)} groups of files with identical lengths to consider.") 
+
 
     try:
+        if len(size_dups):
+            sys.stderr.write("Hashing ...\n")
+
         for i, datum in enumerate(size_dups.items()):
             if i % 100 == 0: 
                 sys.stderr.write('+')
@@ -306,8 +304,8 @@ def redeux_main(pargs:argparse.Namespace) -> int:
             for f in filelist:
                 if finfo_tree[f].inode in by_inode: continue
                 f = fname.Fname(f)
-                if size > pargs.big_file: 
-                    by_hash[edgehash(str(f))].append(str(f))
+                if size > pargs.big_file and pargs.hash_big_files: 
+                    by_hash[f.edge_hash].append(str(f))
                 else:        
                     by_hash[f.hash].append(str(f))
 
@@ -315,7 +313,10 @@ def redeux_main(pargs:argparse.Namespace) -> int:
         pass
 
     true_duplicates = {hash:filelist for hash, filelist in by_hash.items() if len(filelist) > 1}
-    print(f"\n{len(true_duplicates)} true duplicates found. Writing list to {pargs.output}\n")
+    print(f"\n{len(true_duplicates)} true duplicates found.")
+
+    if len(true_duplicates): 
+        print("Writing list to {pargs.output}\n")
 
     d = {}
     for hash, filelist in true_duplicates.items():
@@ -358,6 +359,9 @@ so we just assume it is a duplicate.""")
     parser.add_argument('--follow-links', action='store_true',
         help="follow symbolic links -- the default is not to.")
 
+    parser.add_argument('--hash-big-files', action='store_true',
+        help="do a SHA1 hash of the first disk block of large files.")
+
     parser.add_argument('--include-hidden', action='store_true',
         help="search hidden directories as well.")
 
@@ -372,6 +376,9 @@ so we just assume it is a duplicate.""")
 
     parser.add_argument('-o', '--output', type=str, default="duplicatefiles.csv",
         help="Output file with the duplicates named")
+
+    parser.add_argument('--owner-only', action='store_true',
+        help="Ignore all files not owned by the user running this program.")
 
     parser.add_argument('--quiet', action='store_true',
         help="eliminates narrative while running except for errors.")
