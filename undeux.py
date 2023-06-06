@@ -405,6 +405,8 @@ K, M, G, or X (auto scale), instead""")
         help="default is 0 days -- i.e., consider all files, even new ones.")
 
     pargs = parser.parse_args()
+    if pargs.explain:
+        
     if pargs.version:
         print(f"Version 1.1")
         sys.exit(os.EX_OK)

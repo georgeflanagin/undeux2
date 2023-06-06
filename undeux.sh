@@ -3,8 +3,8 @@ export latestpython=$(ls /usr/bin/python3.? | tail -1)
 
 function undeux
 {
-    command pushd $undir
+    command pushd $undir >/dev/null
     $latestpython undeux.py
-    command popd 
+    command popd >/dev/null
 }
 
