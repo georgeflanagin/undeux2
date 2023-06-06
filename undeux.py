@@ -9,7 +9,7 @@ __copyright__ =     'Copyright 2021 George Flanagin'
 __credits__ =       'None. This idea has been around forever.'
 __version__ =       '1.1'
 __maintainer__ =    'George Flanagin'
-__email__ =         'me+redeux@georgeflanagin.com'
+__email__ =         'me+undeux@georgeflanagin.com'
 __status__ =        'continual development.'
 __license__ =       'MIT'
 
@@ -75,7 +75,7 @@ finfo_tree  = SloppyTree()
 me = getpass.getuser()
 my_uid = pwd.getpwnam(me).pw_uid
 
-redeux_help = """
+undeux_help = """
     Let's provide more info on a few of the key arguments and the
         display while the program runs.
 
@@ -90,7 +90,7 @@ redeux_help = """
         to hash. YMMV, so this value is up to you. Often, if there is
         a difference between two large files with the same size, the 
         differences are in the first few. Before these files are hashed, 
-        redeux will check the front of the file for ordinary differences.
+        undeux will check the front of the file for ordinary differences.
 
     --exclude :: This parameter can be used multiple times. Remember
         that hidden files will not require an explicit exclusion in 
@@ -100,7 +100,7 @@ redeux_help = """
         "--exclude /private", then any file in any directory that
         begins with "private" will be excluded.
 
-        Given that one may want to run this program as root, redeux
+        Given that one may want to run this program as root, undeux
         will always ignore files that are owned by root, as well as
         files in the top level directories like /dev, /proc, /mnt, 
         /sys, /boot, and /var.
@@ -240,7 +240,7 @@ def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
             data.st_ino, data.st_nlink, data.st_ctime )
 
 
-def redeux_main(pargs:argparse.Namespace) -> int:
+def undeux_main(pargs:argparse.Namespace) -> int:
 
     global inode_to_filename, finfo_tree, dups_by_size, start_time
 
@@ -337,10 +337,10 @@ def redeux_main(pargs:argparse.Namespace) -> int:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog='redeux',
+    parser = argparse.ArgumentParser(prog='undeux',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent(redeux_help),
-        description='redeux: Find probable duplicate files.')
+        epilog=textwrap.dedent(undeux_help),
+        description='undeux: Find probable duplicate files.')
 
     parser.add_argument('-?', '--explain', action='store_true')
 
@@ -421,4 +421,4 @@ K, M, G, or X (auto scale), instead""")
 
     start_time = time.time()
     os.nice(pargs.nice)
-    sys.exit(redeux_main(pargs))
+    sys.exit(undeux_main(pargs))
