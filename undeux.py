@@ -110,6 +110,7 @@ undeux_help = """
 
 def undeux_main(pargs:argparse.Namespace) -> int:
 
+    start=time.time()
     # First, let's make sure we have a database of the correct version.
     # The check function only returns if the database is present,
     # readable, and a version that is earlier than this code.
@@ -125,7 +126,8 @@ def undeux_main(pargs:argparse.Namespace) -> int:
         num_files = 0
         for b in block_of_files(pargs.dir, pargs.z):
             num_files += undeuxdb.add_files(db, b)
-        print(f"scanned {num_files} files.")
+        stop=time.time()
+        print(f"scanned {num_files} files in {round(stop-start,3)} seconds.")
     except Exception as e:
         print(f"{e=}")
         return os.EX_IOERR
