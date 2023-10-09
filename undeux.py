@@ -5,9 +5,9 @@ from   typing import *
 
 # Credits
 __author__ =        'George Flanagin'
-__copyright__ =     'Copyright 2021 George Flanagin'
+__copyright__ =     'Copyright 2023 George Flanagin'
 __credits__ =       'None. This idea has been around forever.'
-__version__ =       '1.1'
+__version__ =       '1.2'
 __maintainer__ =    'George Flanagin'
 __email__ =         'me+undeux@georgeflanagin.com'
 __status__ =        'continual development.'
@@ -41,12 +41,13 @@ import textwrap
 import fileutils
 import fname
 from   linuxutils import dump_cmdline
-
 from   sloppytree import SloppyTree
 
 #####################################
 # Some Global data structures.      #
 #####################################
+
+import hash
 
 ####
 # To look for pseudo duplicates that are actually hard links.
