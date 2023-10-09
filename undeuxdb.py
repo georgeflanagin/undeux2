@@ -21,6 +21,7 @@ from   collections.abc import Generator
 import contextlib
 import getpass
 mynetid = getpass.getuser()
+import multiprocessing
 
 ###
 # Installed libraries.
@@ -56,6 +57,36 @@ __email__ = ['gflanagin@richmond.edu']
 __status__ = 'in progress'
 __license__ = 'MIT'
 
+lock_object = None
+
+@trap
+def open_and_check_db(dbname:str, version_date:int) -> sqlitedb.SQLiteDB:
+    """
+    Checks that the code we are running is at least as new
+    as the database schema. The assumption is that required
+    changes to this code are made after the change the database
+    schema.
+
+    Additionally, we will manufacture the db lock object here.
+    """
+    global lock_object
+    if lock_object is None:
+        lock_object = multiprocessing.RLock()
+
+    if not (db := sqlitedb.SQLiteDB(dbname, 
+        use_pandas=False, lock=lock_object, timeout=5)):
+        print(f"{dbname=} not found.")
+        sys.exit(os.EX_DATAERR)
+
+    row = db.execute_SQL("SELECT * FROM current_version")
+    if int(row.pop()[1]) > version_date:
+        print(f"{dbname=} database schema has been modified after this code.")
+        sys.exit(os.EX_CONFIG)
+
+    return db
+
+
+@trap
 def add_files(db:sqlitedb.SQLiteDB,
     data:Generator) -> int:
     """
@@ -68,4 +99,5 @@ def add_files(db:sqlitedb.SQLiteDB,
         """
     db.cursor.executemany(SQL, data)
     db.commit()
+    return db.cursor.rowcount
 

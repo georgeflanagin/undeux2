@@ -1,5 +1,5 @@
-export undir="$PWD"
-export latestpython=$(ls /usr/bin/python3.? | tail -1)
+export undir="$sw/undeux"
+export latestpython=$(ls -1 /usr/bin/python3.? | tail -1)
 
 function undeux
 {

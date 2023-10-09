@@ -1,3 +1,19 @@
+DROP TABLE IF EXISTS version_info;
+CREATE TABLE IF NOT EXISTS version_info (
+    rowid integer primary key,
+    version_date datetime default current_timestamp,
+    narrative text );
+
+DROP VIEW IF EXISTS current_version;
+CREATE VIEW IF NOT EXISTS current_version AS
+    SELECT ROWID, strftime('%s', VERSION_DATE) as unix_timestamp, narrative 
+        FROM version_info 
+        ORDER BY rowid DESC
+        LIMIT 1;
+
+INSERT INTO version_info (narrative) VALUES 
+    ('This is the original version.');
+
 DROP TABLE IF EXISTS metadata;
 CREATE TABLE IF NOT EXISTS metadata (
     filename text,

@@ -47,29 +47,9 @@ from   sloppytree import SloppyTree
 # Some Global data structures.      #
 #####################################
 
+from   fsgenerators import *
 import hash
-
-####
-# To look for pseudo duplicates that are actually hard links.
-####
-by_inode    = collections.defaultdict(list)
-
-####
-# To look for files that are the same size
-####
-by_size     = collections.defaultdict(list)
-
-####
-# For files that are the same size, we check the hashes.
-####
-by_hash     = collections.defaultdict(list)
-
-####
-# The keys are the filenames, and the values are the info
-# about each file. Using SloppyTree instead of dict allows
-# us to directly instantiate the info about each file.
-####
-finfo_tree  = SloppyTree()
+import undeuxdb
 
 # To support --owner-only, we need to know who is running
 # the program.
@@ -128,211 +108,27 @@ undeux_help = """
     
     """
 
-class StatName(enum.IntEnum):
-    """
-    Give these stats some clean names.
-    """
-    SIZE = 0
-    MODTIME = 1
-    ACCESSTIME = 2
-    INODE = 3
-    LINKCOUNT = 4
-    CREATETIME = 5
-
-
-def loglog(x:float) -> float:
-    return math.log(math.log(x))
-
-
-class AbstractSigmoid:
-    """
-    A tuneable scoring system for .. just about anything.
-    """
-
-    __slots__ = {
-        'max_value':'All calculations yield a value less than this.',
-        'incline'  :'Derivative at midpoint.',
-        'midpoint' :'x value at the midpoint.',
-        'rounding' :'number of digits to round.',
-        'scalefcn' :'function to scale the quantities.',
-        'now'      :'time when this object was created.'
-        }
-
-    call_keys = {'size', 'ctime', 'mtime', 'atime'}
-
-    __values__ = [ 1.0, 0.15, 40, 4, math.log, time.time()]
-    __defaults__ = dict(zip(__slots__, __values__))
-
-    def __init__(self, **kwargs) -> None:
-        for k, v in AbstractSigmoid.__defaults__.items():
-            setattr(self, k, v)
-        for k, v in kwargs.items():
-            try:
-                self[k] = v
-            except Exception as e:
-                raise Exception(f"Unknown parameter {k}")
-
-
-    def ugliness(self, path:str) -> float:
-        temp=os.stat(path)
-        return self(size=temp.st_size, mtime=temp.st_mtime, 
-            ctime=temp.st_ctime, atime=temp.st_atime)   
-
-
-    def __call__(self, **kwargs) -> float:
-        """
-        Invoke the sigmoid function to give us a number in the
-        range of [0, 1). Usage:
-
-        sigmoid = AbstractSigmoid()
-        v = sigmoid(...)
-        """
-        if not AbstractSigmoid.call_keys == set(kwargs):
-            return 0
-        unused = self.scalefcn(kwargs['atime'])
-        unmodded = self.scalefcn(kwargs['mtime'])
-        age = self.scalefcn(kwargs['ctime'])
-        size = self.scalefcn(kwargs['size'])
-        total = sum((age, size))
-
-        return round(self.max_value / 
-            (math.exp(-self.incline*(total-self.midpoint)) +1),
-            self.rounding)
-
-
-scorer = AbstractSigmoid()
-
-def stats_of_interest(f:str, pargs:argparse.Namespace) -> tuple:
-    """
-    Return a tuple of the "interesting" stats.
-    """
-    global start_time
-    global my_uid
-
-    try:
-        data = os.stat(f)
-    except PermissionError as e: 
-        # cannot stat it.
-        pargs.verbose and print(f"!perms! {f}")
-        return None
-
-    # If we are in owner only, is this even my file?
-    if pargs.owner_only and my_uid - data.st_uid:
-        parse.verbose and print(f"!~mine! {f}")
-        return None
-
-    # Does it belong to root? 
-    if data.st_uid * data.st_gid == 0: 
-        pargs.verbose and print(f"!oroot! {f}")
-        return None 
-
-    # If it is tiny, why worry?
-    if data.st_size < pargs.small_file:     
-        pargs.verbose and print(f"!small! {f}")
-        return None
-
-    # If it is new, we must need it.
-    if start_time - data.st_ctime < pargs.young_file:
-        pargs.verbose and print(f"!young! {f}")
-        return None
-
-    # Size, mod time, access time, inode, number of links.
-    return ( data.st_size, data.st_mtime, data.st_atime, 
-            data.st_ino, data.st_nlink, data.st_ctime )
-
-
 def undeux_main(pargs:argparse.Namespace) -> int:
 
-    global inode_to_filename, finfo_tree, dups_by_size, start_time
-
-    if not os.path.isdir(pargs.dir):
-        sys.stderr.write(f"{pargs.dir} not found\n")
-        return os.EX_DATAERR
-
-    pargs.exclude.extend(('/proc/', '/dev/', '/mnt/', '/sys/', '/boot/', '/var/'))
+    # First, let's make sure we have a database of the correct version.
+    # The check function only returns if the database is present,
+    # readable, and a version that is earlier than this code.
+    code_version = os.path.getmtime(os.path.abspath(__file__))
+    db = undeuxdb.open_and_check_db(pargs.db, code_version)
 
     ############################################################
     # Use the generator to collect the files so that we do not
     # build a useless list in memory. 
     ############################################################
     sys.stderr.write(f"Looking at files in {pargs.dir}\n")
-    i = 0
     try:
-        for i, f in enumerate(fileutils.all_files_in(pargs.dir, pargs.include_hidden)):
-            if not pargs.quiet and not i % 1000: 
-                sys.stderr.write('.')
-                sys.stderr.flush()
-            if i > pargs.limit: break
-
-            ######################################################
-            # 1. Is it something the user wants to exclude?
-            # 2. Is it a symlink that we are not following?
-            # 3. Is it qualified after stat-ing it?
-            ######################################################
-
-            if pargs.exclude and any(_ in f for _ in pargs.exclude): continue 
-            if not pargs.follow_links and os.path.islink(f): continue
-            if (finfo := stats_of_interest(f, pargs)) is None: continue           
-
-            ######################################################
-            # Load it in the data structures.
-            ######################################################
-            finfo_tree[f].size = finfo[StatName.SIZE]
-            finfo_tree[f].inode = finfo[StatName.INODE]
-            by_size[finfo[StatName.SIZE]].append(f)
-            if finfo[StatName.LINKCOUNT] > 1: by_inode[finfo[StatName.INODE]].append(f)
-
-    except KeyboardInterrupt as e:
-        pass
-
-    sys.stderr.write(f"\n{i+1} files were discovered.\n")
-    sys.stderr.write(f"{len(by_inode.keys())} hard links.\n")
-    sys.stderr.write(f"{len(finfo_tree.keys())} files to be further considered.\n")
-
-    size_dups = {size:filelist for size, filelist in by_size.items() if len(filelist) > 1}
-    sys.stderr.write(f"{len(size_dups)} groups of files with identical lengths to consider.\n") 
-
-
-    try:
-        if len(size_dups):
-            sys.stderr.write("Hashing ...\n")
-
-        for i, datum in enumerate(size_dups.items()):
-            if i % 100 == 0: 
-                sys.stderr.write('+')
-                sys.stderr.flush()
-
-            size, filelist = datum
-            for f in filelist:
-                if finfo_tree[f].inode in by_inode: continue
-                f = fname.Fname(f)
-                if size > pargs.big_file and pargs.hash_big_files: 
-                    by_hash[f.edge_hash].append(str(f))
-                else:        
-                    by_hash[f.hash].append(str(f))
-
-    except KeyboardInterrupt as e:
-        pass
-
-    true_duplicates = {hash:filelist for hash, filelist in by_hash.items() if len(filelist) > 1}
-    print(f"\n{len(true_duplicates)} true duplicates found.")
-    if not len(true_duplicates): 
-        return os.EX_OK
-
-    print(f"Writing list to {pargs.output}\n")
-
-    d = {}
-    for hash, filelist in true_duplicates.items():
-        # We know the size is the same for all elements of the list, so
-        # we can just take the first size.
-        if hash.startswith('X'):
-            d[os.stat(filelist[0]).st_size] = tuple(('X', *filelist))
-        else:
-            d[os.stat(filelist[0]).st_size] = tuple(filelist)
-
-    with open(pargs.output, 'w') as outfile:
-        for k in sorted(d, reverse=True):
-            outfile.write(f"{k} : {d[k]}\n")
+        num_files = 0
+        for b in block_of_files(pargs.dir, pargs.z):
+            num_files += undeuxdb.add_files(db, b)
+        print(f"scanned {num_files} files.")
+    except Exception as e:
+        print(f"{e=}")
+        return os.EX_IOERR
         
     return os.EX_OK
 
@@ -346,29 +142,29 @@ if __name__ == "__main__":
     parser.add_argument('-?', '--explain', action='store_true')
 
     parser.add_argument('--big-file', type=int, 
-        default=1<<20,
+        default=1<<30,
         help="""A file larger than this value is *big* enough it has a 
 high probability of being a dup of a file the same size,
 so we just assume it is a duplicate.""")
 
-    parser.add_argument('--dir', type=str, 
-        default=fileutils.expandall("$HOME"),
-        help="directory to investigate (if not your home dir)")
+    parser.add_argument('--db', type=str, 
+        default=fileutils.expandall(os.path.join(os.getcwd(), 'undeux.db')),
+        help="Name of the database to use.")
 
-    parser.add_argument('-x', '--exclude', action='append', 
-        default=[],
-        help="""one or more directories or patterns to ignore.""")
+    parser.add_argument('--dir', type=str, 
+        default=fileutils.expandall(os.getcwd()),
+        help="directory to investigate (if not *this* directory)")
 
     parser.add_argument('--follow-links', action='store_true',
         help="follow symbolic links -- the default is not to.")
 
     parser.add_argument('--hash-big-files', action='store_true',
-        help="do a SHA1 hash of the first disk block of large files.")
+        help="do a hash of the first disk block of large files.")
 
     parser.add_argument('--include-hidden', action='store_true',
         help="search hidden directories as well.")
 
-    parser.add_argument('--just-do-it', action='store_true',
+    parser.add_argument('-y', '--just-do-it', action='store_true',
         help="run the program using the defaults.")
 
     parser.add_argument('--limit', type=int, default=sys.maxsize,
@@ -404,6 +200,9 @@ K, M, G, or X (auto scale), instead""")
 
     parser.add_argument('--young-file', type=int, default=0,
         help="default is 0 days -- i.e., consider all files, even new ones.")
+
+    parser.add_argument('-z', type=int, default=20,
+        help="number of rows to insert in each database transaction.")
 
     pargs = parser.parse_args()
     if pargs.version:
