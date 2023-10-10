@@ -60,31 +60,14 @@ undeux_help = """
     Let's provide more info on a few of the key arguments and the
         display while the program runs.
 
-    .  :: Unless you are running --quiet, the program will display
-        a period for every 1000 files that are "stat-ed" when the
-        directory is being browsed.
+    --db :: This is the name of the database where the data will be
+        recorded. The default value is $PWD/undeux.db only because
+        this value can be assumed to be writeable. In general use, 
+        you probably want to put the database is some central location,
+        preferably on a SSD.
 
-    +  :: Hashing is shown with a + for every 100 files that are 
-        hashed. 
-
-    --big-file :: Files larger than this are computationally intensive
-        to hash. YMMV, so this value is up to you. Often, if there is
-        a difference between two large files with the same size, the 
-        differences are in the first few. Before these files are hashed, 
-        undeux will check the front of the file for ordinary differences.
-
-    --exclude :: This parameter can be used multiple times. Remember
-        that hidden files will not require an explicit exclusion in 
-        most cases. Simple pattern matching is used, so if you put
-        in "--exclude A", then any file with a "A" anywhere in its
-        fully qualified name will be excluded. If you type
-        "--exclude /private", then any file in any directory that
-        begins with "private" will be excluded.
-
-        Given that one may want to run this program as root, undeux
-        will always ignore files that are owned by root, as well as
-        files in the top level directories like /dev, /proc, /mnt, 
-        /sys, /boot, and /var.
+    --dir :: This is the name of the top level directory to be scanned.
+        The default value is $PWD.
 
     --hash-big-files :: This switch is required to do any content hashing
         at all. 
@@ -93,19 +76,17 @@ undeux_help = """
         will be excluded. They are often part of a git repo, or a part
         of some program's cache. Why bother? 
 
-    --owner-only :: Ignore all files not owned by the user running the
-        program.
+    --nice :: The default value is to be as nice as possible.
 
-    --small-file :: Some programs create hundreds or thousands of very
-        small files. Many may be short lived duplicates. The default value
-        of 4097 bytes means that a file must be at least that large
-        to even figure into our calculus.
+    --progress :: The number of files to scan between proof-of-life messages.
+        The default value is 65537. 
 
-    --young-file :: The value is in days, so if a long calculation is
-        running, then we may want to exclude files that are younger
-        than the time it has been running. The files are in use, and
-        if they are duplicates, then there is probably a reason.
-    
+    -y :: Do not confirm options before beginning the scan. This is needed
+        for batch operations.
+
+    -z :: The number of records per INSERT statement into the database.
+        The default value is 1000, and it may not help much to increase
+        the value.
     """
 
 def undeux_main(pargs:argparse.Namespace) -> int:
@@ -117,15 +98,22 @@ def undeux_main(pargs:argparse.Namespace) -> int:
     code_version = os.path.getmtime(os.path.abspath(__file__))
     db = undeuxdb.open_and_check_db(pargs.db, code_version)
 
+    threshold = pargs.progress
+
     ############################################################
     # Use the generator to collect the files so that we do not
     # build a useless list in memory. 
     ############################################################
     sys.stderr.write(f"Looking at files in {pargs.dir}\n")
     try:
-        num_files = 0
+        num_files = old_num_files = 0
         for b in block_of_files(pargs.dir, pargs.z):
+            old_num_files = num_files
             num_files += undeuxdb.add_files(db, b)
+            if old_num_files < threshold < num_files:
+                print(f"scanned {num_files} in {round(time.time()-start, 3)} seconds.")
+                threshold += pargs.progress
+
         stop=time.time()
         print(f"scanned {num_files} files in {round(stop-start,3)} seconds.")
     except Exception as e:
@@ -169,46 +157,21 @@ so we just assume it is a duplicate.""")
     parser.add_argument('-y', '--just-do-it', action='store_true',
         help="run the program using the defaults.")
 
-    parser.add_argument('--limit', type=int, default=sys.maxsize,
-        help="Limit the number of files considered for testing purposes.")
-
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
 
-    parser.add_argument('-o', '--output', type=str, default="duplicatefiles.csv",
-        help="Output file with the duplicates named")
-
-    parser.add_argument('--owner-only', action='store_true',
-        help="Ignore all files not owned by the user running this program.")
-
-    parser.add_argument('--quiet', action='store_true',
-        help="eliminates narrative while running except for errors.")
-
-    parser.add_argument('--small-file', type=int, 
-        default=resource.getpagesize()+1,
-        help=f"files less than this size (default {resource.getpagesize()+1}) are not evaluated.")
-
-    parser.add_argument('--units', type=str, 
-        default="X", 
-        choices=('B', 'G', 'K', 'M', 'X'),
-        help="""file sizes are in bytes by default. Report them in 
-K, M, G, or X (auto scale), instead""")
-
-    parser.add_argument('--verbose', action='store_true',
-        help="go into way too much detail.")
+    parser.add_argument('-p', '--progress', type=int, default=(1<<16)+1,
+        help=f"Number of files scanned between proof-of-life messages. Default is {(1<<16)+1}")
 
     parser.add_argument('--version', action='store_true', 
         help='Print the version and exit.')
 
-    parser.add_argument('--young-file', type=int, default=0,
-        help="default is 0 days -- i.e., consider all files, even new ones.")
-
-    parser.add_argument('-z', type=int, default=20,
-        help="number of rows to insert in each database transaction.")
+    parser.add_argument('-z', type=int, default=1000,
+        help=f"Number of rows to insert in each database transaction. Default is 1000.")
 
     pargs = parser.parse_args()
     if pargs.version:
-        print(f"Version 1.1")
+        print(f"Version 1.2")
         sys.exit(os.EX_OK)
 
     dump_cmdline(pargs, split_it=True)
@@ -221,6 +184,5 @@ K, M, G, or X (auto scale), instead""")
             print("Apparently it does not. Exiting.")
             sys.exit(os.EX_CONFIG)
 
-    start_time = time.time()
     os.nice(pargs.nice)
     sys.exit(undeux_main(pargs))
