@@ -95,6 +95,7 @@ def block_of_files(d:str, block_size:int) -> tuple:
 
     # Use enumerate to tell us which element of data will
     # receive the info. 
+    i = 0
     for i, row in enumerate(files_and_stats(d)):
         data[i%block_size] = row
         # When the block is "full", return it.
