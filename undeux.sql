@@ -23,11 +23,11 @@ CREATE TABLE IF NOT EXISTS metadata (
     filesize integer,
     mtime datetime,
     atime datetime,
+    bucket integer,
     rowid integer primary key
     );
 
 CREATE INDEX size_idx on metadata(filesize);
-CREATE INDEX directory_idx on metadata(directory_name);
 
 -- This view shows files with multiple hard links.
 DROP VIEW IF EXISTS fake_duplicates;

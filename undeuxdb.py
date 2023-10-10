@@ -94,8 +94,8 @@ def add_files(db:sqlitedb.SQLiteDB,
     """
     SQL = """
         INSERT INTO metadata 
-            (filename, directory_name, inode, nlinks, filesize, mtime, atime)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+            (filename, directory_name, inode, nlinks, filesize, mtime, atime, bucket)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
     db.cursor.executemany(SQL, data)
     db.commit()

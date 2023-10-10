@@ -111,11 +111,11 @@ def undeux_main(pargs:argparse.Namespace) -> int:
             old_num_files = num_files
             num_files += undeuxdb.add_files(db, b)
             if old_num_files < threshold < num_files:
-                print(f"scanned {num_files} in {round(time.time()-start, 3)} seconds.")
+                print(f"scanned {num_files} in {round(time.time()-start, 3)} seconds.", flush=True)
                 threshold += pargs.progress
 
         stop=time.time()
-        print(f"scanned {num_files} files in {round(stop-start,3)} seconds.")
+        print(f"scanned {num_files} files in {round(stop-start,3)} seconds.", flush=True)
     except Exception as e:
         print(f"{e=}")
         return os.EX_IOERR

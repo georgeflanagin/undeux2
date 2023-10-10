@@ -20,6 +20,7 @@ if sys.version_info < min_py:
 ###
 # Installed libraries.
 ###
+import xxhash
 
 ###
 # From hpclib
@@ -36,7 +37,6 @@ from   urdecorators import trap
 ###
 # Global objects and initializations
 ###
-verbose = False
 
 ###
 # Credits
@@ -62,11 +62,17 @@ def files_and_stats(d:str) -> tuple:
         # do anything about it. Just skip it.
         try:
             stats = os.stat(f)
+            # Ignore zero length files.
+            if not stats.st_size: continue
         except Exception as e:
             continue
 
+        # For parallel processing, let's create some buckets to which the
+        # files will be assigned. Buckets number [ 0 .. 99 ] seem about
+        # right for grinding out hashes.
+        bucket = xxh3_128_intdigest(f) % 100
         d_part, f_part = os.path.split(f)
-        yield f_part, d_part, stats.st_ino, stats.st_nlink, stats.st_size, stats.st_mtime, stats.st_atime
+        yield f_part, d_part, stats.st_ino, stats.st_nlink, stats.st_size, stats.st_mtime, stats.st_atime, bucket
 
 
 @trap
