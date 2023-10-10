@@ -70,7 +70,7 @@ def files_and_stats(d:str) -> tuple:
         # For parallel processing, let's create some buckets to which the
         # files will be assigned. Buckets number [ 0 .. 99 ] seem about
         # right for grinding out hashes.
-        bucket = xxh3_128_intdigest(f) % 100
+        bucket = xxhash.xxh3_128_intdigest(f) % 100
         d_part, f_part = os.path.split(f)
         yield f_part, d_part, stats.st_ino, stats.st_nlink, stats.st_size, stats.st_mtime, stats.st_atime, bucket
 
