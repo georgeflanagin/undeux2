@@ -41,7 +41,6 @@ sleep 1
 touch undeux.py
 
 # Go for it.
-/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/roald"
 /usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/tg9kt"
 /usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/zeta5"
 

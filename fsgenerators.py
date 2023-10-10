@@ -104,4 +104,7 @@ def block_of_files(d:str, block_size:int) -> tuple:
 
     # We are finished. There is a 1:block_size chance that
     # we finished with the block filled.
-    yield [] if i%block_size == max_index else data[:(i%block_size)+1]
+    if not i or i % block_size == max_index:
+        raise StopIteration
+
+    yield data[:(i%block_size)+1]
