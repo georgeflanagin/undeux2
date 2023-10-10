@@ -3,7 +3,7 @@
 #SBATCH --job-name=undeux
 #SBATCH --output=undeux.%j.out
 #SBATCH --ntasks=1
-#SBATCH --time=1:00:00
+#SBATCH --time=72:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=hpc@richmond.edu
 #SBATCH --mem=4GB
@@ -22,7 +22,7 @@ export PYTHON=/usr/local/sw/anaconda/anaconda3/bin/python
 export PYTHONPATH=/usr/local/sw/hpclib
 export SCRATCH=/localscratch/installer
 export DB=$SCRATCH/undeux.db
-export TARGET=/scratch/installer
+export TARGET=/scratch/cparish/datarecovery
 export UNDEUXDIR=/usr/local/sw/undeux2
 
 # This is our home.
