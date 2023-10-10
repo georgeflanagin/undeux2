@@ -32,8 +32,8 @@ cd "$UNDEUXDIR"
 mkdir -p "$SCRATCH"
 
 # Build the database
-rm -f "$DB"
-sqlite3 "$DB" < undeux.sql
+# rm -f "$DB"
+# sqlite3 "$DB" < undeux.sql
 
 # Wait one second so that the program doesn't think
 # the database is newer than it is.
@@ -41,7 +41,9 @@ sleep 1
 touch undeux.py
 
 # Go for it.
-/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET"
+/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/roald"
+/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/tg9kt"
+/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/zeta5"
 
 # Bring the file back
 dd if=$DB of=$HOME/undeux.db bs=1M

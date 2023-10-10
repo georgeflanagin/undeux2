@@ -89,6 +89,7 @@ undeux_help = """
         the value.
     """
 
+@trap
 def undeux_main(pargs:argparse.Namespace) -> int:
 
     start=time.time()
@@ -116,6 +117,7 @@ def undeux_main(pargs:argparse.Namespace) -> int:
 
         stop=time.time()
         print(f"scanned {num_files} files in {round(stop-start,3)} seconds.", flush=True)
+
     except Exception as e:
         print(f"{e=}")
         return os.EX_IOERR
