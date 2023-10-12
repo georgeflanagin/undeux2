@@ -20,6 +20,7 @@ import argparse
 import contextlib
 import getpass
 mynetid = getpass.getuser()
+import logging
 
 ###
 # From hpclib
@@ -33,6 +34,10 @@ from   urdecorators import trap
 ###
 import hash
 import undeuxdb
+import urlogger
+
+logger = urlogger.URLogger(logfile='undeux.log', level=logging.ERROR)
+
 
 
 ###
@@ -48,38 +53,51 @@ __status__ = 'in progress'
 __license__ = 'MIT'
 
 
+@trap
 def hash_files_by_bucket(db:sqlitedb.SQLiteDB, buckets:tuple) -> bool:
     """
     Calculate the hashes of probable duplicates, considering only
     files in the assigned bucket.
     """
-    SQL = f"SELECT * from possible_duplicates where bucket in {buckets} limit 1"
+    SQL = f"SELECT * from duplicates where bucket in {buckets} limit 5"
+    # SQL = f"SELECT * from possible_duplicates where bucket in {buckets} limit 1"
+    logger.debug(f"{SQL=}")
     rows = db.execute_SQL(SQL)
+    logger.debug(f"{rows=}")
 
     for row in rows:
         # Make sure it has not already been done!
-        SQL = f"SELECT * FROM hashes WHERE file_id = {row['rowid']}"
+        SQL = f"SELECT * FROM hashes WHERE file_id = {row[-1]}"
+        logger.debug(f"{SQL=}")
         result = db.execute_SQL(SQL)
-        if len(result): continue
+        logger.debug(f"{result=}")
+        if len(result):
+            logger.info(f"{row[-1]} is already hashed.")
+            continue
         
         hasher = hash.Hash()
-        filename = os.path.join(row['directory_name'], row['filename'])
+        filename = os.path.join(row[1], row[0])
+        logger.debug(f"hashing {filename}")
         result = hasher.hash_file(filename)
+        logger.debug(f"{result=}")
         SQL = """
             INSERT INTO hashes (file_id, hash) VALUES (?, ?)       
             """
-        db.execute_SQL(SQL, row['rowid'], result)
+        logger.debug(SQL)
+        db.execute_SQL(SQL, row[-1], result)
+        logger.debug(f"hash added.")
 
 
 @trap
 def calchashes_main(myargs:argparse.Namespace) -> int:
 
     code_version = os.path.getmtime(os.path.abspath(__file__))
-    db = undeuxdb.open_and_check_db(pargs.db, code_version)
+    db = undeuxdb.open_and_check_db(myargs.db, code_version)
+    logger.info(f"{myargs.db} is open")
 
     pids = set()
     for bucket_range in linuxutils.splitter(tuple(range(100)), myargs.cores):
-        if (pid := fork()):
+        if (pid := os.fork()):
             pids.add(pid)
             continue
 
@@ -102,7 +120,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-c', '--cores', type=int, default=1,
         help="Number of cores to use for calculating hashes.")
-    parser.add_argument('-db', type=str, default="undeux.db",
+    parser.add_argument('--db', type=str, default="",
         help="Name of the database with files to scan.")
     parser.add_argument('-o', '--output', type=str, default="",
         help="Output file name")
