@@ -102,6 +102,7 @@ def calchashes_main(myargs:argparse.Namespace) -> int:
             continue
 
         try:
+            os.system(f"ionice -t -c 3 -n 0 -p {os.getpid()}")
             hash_files_by_bucket(db, bucket_range)
         finally:
             os._exit(0)

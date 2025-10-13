@@ -60,7 +60,7 @@ class Hash:
         global use_fast_hash
         self.hasher = xxhash.xxh3_128() if use_fast_hash else hashlib.md5()
 
-    
+
     def hash_file(self, filename:str, how_much:int=0) -> str:
         """
         Do a partial or complete hash of filename.
@@ -88,7 +88,7 @@ class Hash:
             # be concerned with how this happened, so return a zero
             # hash string.
             return "0"*32
- 
+
         else:
             return self.hasher.hexdigest()
 
