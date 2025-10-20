@@ -28,6 +28,7 @@ import contextlib
 import enum
 import getpass
 import hashlib
+from   logging import CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET
 import math
 import pickle
 import pwd
@@ -44,6 +45,9 @@ import fileutils
 import fname
 from   linuxutils import dump_cmdline
 from   urdecorators import trap
+from   urlogger import URLogger
+
+logger=None
 
 
 #####################################
@@ -81,11 +85,11 @@ undeux_help = """
     """
 
 @trap
-def undeux_main(pargs:argparse.Namespace) -> int:
+def undeux_main(myargs:argparse.Namespace) -> int:
 
-    start=time.time()
+    logger.info('scan begun')
 
-    threshold = pargs.progress
+    threshold = myargs.progress
     ############################################################
     # Use the generator to collect the files so that we do not
     # build a useless list in memory.
@@ -93,28 +97,53 @@ def undeux_main(pargs:argparse.Namespace) -> int:
 
     data=collections.defaultdict(list)
 
-    for i, f in enumerate(fileutils.all_files_in(pargs.dir)):
+    for i, f in enumerate(fileutils.all_files_in(myargs.dir)):
+        if not i % myargs.progress: print('.', end='', flush=True)
         info=fileclass.FileClass(f)
-        if not info.usable or info.inodedata.st_size < pargs.big_file: continue
-        data[int(info)].append(str(info))
+        if not info.usable or info.inodedata.st_size < myargs.big_file: continue
+        data[int(info)].append(repr(info))
 
+    logger.info('scan finished')
 
-    stop=time.time()
-    print(f"scanned {i} directory entries in {round(stop-start,3)} seconds.", flush=True)
-    print(f"There are {len(data)} keys in the database.", flush=True)
+    logger.info(f"scanned {i} directory entries.")
+    logger.info(f"{len(data)} distinct lengths.")
 
-
-
-    max_size = 1
+    data = {k:v for k, v in data.items() if len(v) != 1}
+    logger.info(f"possible duplicates reduced to {len(data)} groups.")
+    cases = largest_group = bigk = 0
     for k, v in data.items():
-        if len(v) > max_size: max_size = len(v)
+        cases += len(v)
+        if len(v) > largest_group:
+            largest_group = len(v)
+            bigk = k
 
-    print(f"Longest collision list is {max_size}")
+    logger.info(f"{cases} files needing further checks.")
+    logger.info(f"largest group is for {bigk} and has {largest_group} members.")
+    logger.info(f"beginning search for duplicates")
+
+    possible_duplicates = {}
+    for k, v in data.items():
+        hash_dict=collections.defaultdict(list)
+        for f in v:
+            f = fileclass.FileClass(f)
+            hash_dict[f.fingerprint].append(repr(f))
+        hash_dict = {inner_k:inner_v for inner_k,inner_v in hash_dict.items() if len(inner_v) != 1}
+        possible_duplicates.update(hash_dict)
+
+
+
 
     return os.EX_OK
 
 
 if __name__ == "__main__":
+
+    here       = os.getcwd()
+    progname   = os.path.basename(__file__)[:-3]
+    configfile = f"{here}/{progname}.toml"
+    logfile    = f"{here}/{progname}.log"
+    lockfile   = f"{here}/{progname}.lock"
+
     parser = argparse.ArgumentParser(prog='undeux',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent(undeux_help),
@@ -122,13 +151,18 @@ if __name__ == "__main__":
 
     parser.add_argument('-?', '--explain', action='store_true')
 
+    default_size=1<<12
     parser.add_argument('--big-file', type=int,
-        default=1<<12,
-        help="""A file larger than this value is *big* enough to consider.""")
+        default=default_size,
+        help=f"Only files larger than {default_size} are considered.")
 
     parser.add_argument('--dir', type=str,
         default=fileutils.expandall(os.getcwd()),
         help="directory to investigate (if not *this* directory)")
+
+    parser.add_argument('--log-level', type=int, default=INFO,
+        choices=(CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET),
+        help=f"Logging level, defaults to {INFO}")
 
     parser.add_argument('-y', '--just-do-it', action='store_true',
         help="run the program using the defaults.")
@@ -136,20 +170,33 @@ if __name__ == "__main__":
     parser.add_argument('--nice', type=int, default=20, choices=range(0, 21),
         help="by default, this program runs /very/ nicely at nice=20")
 
-    parser.add_argument('-p', '--progress', type=int, default=(1<<16)+1,
-        help=f"Number of files scanned between proof-of-life messages. Default is {(1<<16)+1}")
+    parser.add_argument('-o', '--output', default="")
 
-    pargs = parser.parse_args()
+    parser.add_argument('-p', '--progress', type=int, default=(1<<10)+1,
+        help=f"Number of files scanned between proof-of-life messages. Default is {(1<<10)+1}")
 
-    dump_cmdline(pargs, split_it=True)
-    if not pargs.just_do_it:
+    parser.add_argument('-z', '--zap', action='store_true',
+        help="remove old logfile[s]")
+
+    myargs=parser.parse_args()
+
+    if myargs.zap:
         try:
-            r = input("Does this look right to you? ")
-            if not "yes".startswith(r.lower()): sys.exit(os.EX_CONFIG)
+            unlink(logfile)
+        except:
+            pass
 
-        except KeyboardInterrupt as e:
-            print("Apparently it does not. Exiting.")
-            sys.exit(os.EX_CONFIG)
+    myargs = parser.parse_args()
+    logger=URLogger(logfile=logfile, level=myargs.log_level)
+    print(f"logging to {logfile} at level {myargs.log_level}")
 
-    os.nice(pargs.nice)
-    sys.exit(undeux_main(pargs))
+    dump_cmdline(myargs, split_it=True)
+    os.nice(myargs.nice)
+
+    try:
+        outfile = sys.stdout if not myargs.output else open(myargs.output, 'w')
+        with contextlib.redirect_stdout(outfile):
+            sys.exit(globals()[f"{progname}_main"](myargs))
+
+    except Exception as e:
+        print(f"Escaped or re-raised exception: {e}")
