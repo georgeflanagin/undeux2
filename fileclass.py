@@ -94,8 +94,6 @@ class FileClass:
         f1 & f2         | f1 and f2 have the same partial hash (and
                         |   the same size)
     --------------------+----------------------------------------------
-        f1 ^ f2         | f1 and f2 have different partial hashes
-    --------------------+----------------------------------------------
         f1 @ f2         | f1 and f2 are different files with the same
                         |   content. I.e., they are duplicates.
     --------------------+----------------------------------------------
@@ -103,18 +101,6 @@ class FileClass:
     """
     BUFSIZE = io.DEFAULT_BUFFER_SIZE
     HASHBLOCK = BUFSIZE << 8
-
-    class_keys = {
-        'minsize' :  BUFSIZE,
-        'recent'  :  0
-        }
-
-
-    @classmethod
-    def set_filter(cls, params:dict) -> None:
-        for k, v in params.items():
-            setattr(FileClass, k, v)
-
 
     __slots__ = {
         'name' : "the file's complete name",
@@ -141,9 +127,6 @@ class FileClass:
                 self.inodedata = None
         self.usable = self.inodedata is not None
         if not self.usable: return
-
-        self.usable = ( self.inodedata.st_size > FileClass.class_keys['minsize'] and
-                        self.inodedata.st_mtime > FileClass.class_keys['recent'] )
         self.unique = self.inodedata.st_nlink == 1
 
 
@@ -249,9 +232,13 @@ class FileClass:
         return self.inodedata.st_size
 
 
+    def __invert__(self) -> dict:
+        return {k:getattr(self,k) for k in FileClass.__slots__.keys()}
+
     @property
     def printable(self) -> str:
-        data=[]
+        data=[str(self)]
+        data.append(repr(self))
         for k in FileClass.__slots__:
             data.append(f"{k} = {getattr(self, k)}")
         return "\n".join(data)
@@ -277,6 +264,10 @@ def parse_st_mode(mode:int) -> tuple:
 
 @trap
 def fileclass_main(myargs:argparse.Namespace) -> int:
+    """
+    Simplified test function for the functions above.
+    """
+
     f = FileClass(myargs.f)
     f.fingerprint()
     f.fullfingerprint()
@@ -284,7 +275,7 @@ def fileclass_main(myargs:argparse.Namespace) -> int:
 
     if myargs.g:
         g = FileClass(myargs.g)
-        print(g.printable)
+        print(f"Second file is {str(g)}")
 
         print(f"{(f==g)=}")
         print(f"{(f!=g)=}")
