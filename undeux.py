@@ -5,7 +5,7 @@ from   typing import *
 
 # Credits
 __author__ =        'George Flanagin'
-__copyright__ =     'Copyright 2023 George Flanagin'
+__copyright__ =     'Copyright 2025 George Flanagin'
 __credits__ =       'None. This idea has been around forever.'
 __version__ =       '1.2'
 __maintainer__ =    'George Flanagin'
@@ -63,27 +63,6 @@ import undeuxdb
 me = getpass.getuser()
 my_uid = pwd.getpwnam(me).pw_uid
 
-undeux_help = """
-    Let's provide more info on a few of the key arguments and the
-        display while the program runs.
-
-    --dir :: This is the name of the top level directory to be scanned.
-        The default value is $PWD.
-
-    --include-hidden :: This switch is generally off, and hidden files
-        will be excluded. They are often part of a git repo, or a part
-        of some program's cache. Why bother?
-
-    --nice :: The default value is to be as nice as possible.
-
-    --progress :: The number of files to scan between proof-of-life messages.
-        The default value is 65537.
-
-    -y :: Do not confirm options before beginning the scan. This is needed
-        for batch operations.
-
-    """
-
 @trap
 def undeux_main(myargs:argparse.Namespace) -> int:
 
@@ -97,11 +76,16 @@ def undeux_main(myargs:argparse.Namespace) -> int:
 
     data=collections.defaultdict(list)
 
-    for i, f in enumerate(fileutils.all_files_in(myargs.dir)):
-        if not i % myargs.progress: print('.', end='', flush=True)
-        info=fileclass.FileClass(f)
-        if not info.usable or info.inodedata.st_size < myargs.big_file: continue
-        data[int(info)].append(repr(info))
+    for dir in myargs.dirs:
+        if not os.path.isdir(dir):
+            logger.error(f"{dir} is not a directory; cannot scan it.")
+            continue
+
+        for i, f in enumerate(fileutils.all_files_in(dir)):
+            if not i % myargs.progress: print('.', end='', flush=True)
+            info=fileclass.FileClass(f)
+            if not info.usable or info.inodedata.st_size < myargs.big_file: continue
+            data[int(info)].append(repr(info))
 
     logger.info('scan finished')
 
@@ -118,6 +102,8 @@ def undeux_main(myargs:argparse.Namespace) -> int:
             bigk = k
 
     logger.info(f"{cases} files needing further checks.")
+    if not cases: return os.EX_OK
+
     logger.info(f"largest group is for {bigk} and has {largest_group} members.")
     logger.info(f"beginning search for duplicates")
 
@@ -129,9 +115,6 @@ def undeux_main(myargs:argparse.Namespace) -> int:
             hash_dict[f.fingerprint].append(repr(f))
         hash_dict = {inner_k:inner_v for inner_k,inner_v in hash_dict.items() if len(inner_v) != 1}
         possible_duplicates.update(hash_dict)
-
-
-
 
     return os.EX_OK
 
@@ -145,8 +128,8 @@ if __name__ == "__main__":
     lockfile   = f"{here}/{progname}.lock"
 
     parser = argparse.ArgumentParser(prog='undeux',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent(undeux_help),
+        # formatter_class=argparse.RawDescriptionHelpFormatter,
+        # epilog=textwrap.dedent(undeux_help),
         description='undeux: Find probable duplicate files.')
 
     parser.add_argument('-?', '--explain', action='store_true')
@@ -156,9 +139,9 @@ if __name__ == "__main__":
         default=default_size,
         help=f"Only files larger than {default_size} are considered.")
 
-    parser.add_argument('--dir', type=str,
-        default=fileutils.expandall(os.getcwd()),
-        help="directory to investigate (if not *this* directory)")
+    parser.add_argument('dirs', nargs="*", 
+        default=[fileutils.expandall(os.getcwd())],
+        help="directories to investigate (if not *this* directory)")
 
     parser.add_argument('--log-level', type=int, default=INFO,
         choices=(CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET),
