@@ -167,7 +167,7 @@ class FileClass:
         return self.inodedata.st_size != other.inodedata.st_size
 
 
-    def fingerprint(self) -> int:
+    def fingerprint(self) -> str:
         """
         Hash a small part of the file, or the whole file if the
         file is small.
@@ -179,16 +179,16 @@ class FileClass:
             h.update(f.read(FileClass.HASHBLOCK))
             f.seek(-FileClass.HASHBLOCK, os.SEEK_END)
             h.update(f.read())
-            self.hash = h.intdigest()
+            self.hash = h.hexdigest()
 
         else:
-            self.full_hash = self.hash = hashfoo(f.read()).intdigest()
+            self.full_hash = self.hash = hashfoo(f.read()).hexdigest()
 
         return self.hash
 
 
 
-    def fullfingerprint(self) -> int:
+    def fullfingerprint(self) -> str:
         """
         Hash the whole file.
         """
@@ -200,11 +200,16 @@ class FileClass:
             while chunk := f.read(FileClass.HASHBLOCK):
                 h.update(chunk)
 
-            self.full_hash = h.intdigest()
+            self.full_hash = h.hexdigest()
             return self.full_hash
 
         except Exception as e:
             f.close()
+
+
+    @property
+    def links(self) -> int:
+        return self.inodedata.st_nlink
 
 
     def __and__(self, other:FileClass) -> bool:
@@ -227,7 +232,7 @@ class FileClass:
 
     def __int__(self) -> int:
         """
-        return the file's size as an int.
+        return the file's size as an integer.
         """
         return self.inodedata.st_size
 
