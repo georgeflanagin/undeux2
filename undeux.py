@@ -65,7 +65,7 @@ new_table_statement = lambda table_name : textwrap.dedent(f"""
         );
     """).strip()
 
-new_index_statement = lambda table_name : textwrap.dedent(f"""
+index_statement = lambda table_name : textwrap.dedent(f"""
     CREATE INDEX idx{table_name} ON {table_name}(bucket, fingerprint);
     """).strip()
 
@@ -236,6 +236,8 @@ def undeux_main(myargs:argparse.Namespace) -> int:
     logger.info("database updated.")
     db.execute_SQL(index_statement(table_name))
     logger.info("index created.")
+    db.execute_SQL(false_positives(table_name))
+    logger.info("false duplicates removed from consideration.")
 
     return os.EX_OK
 
