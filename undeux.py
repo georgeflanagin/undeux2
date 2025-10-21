@@ -44,10 +44,25 @@ import fileclass
 import fileutils
 import fname
 from   linuxutils import dump_cmdline
+from   sqlitedb import SQLiteDB
 from   urdecorators import trap
 from   urlogger import URLogger
 
 logger=None
+
+drop_table_statement = lambda table_name : f"""
+    DROP TABLE IF EXISTS {table_name};
+    """
+
+new_table_statement = lambda table_name : f"""
+    CREATE TABLE {table_name} (
+        filename TEXT,
+        fingerprint INTEGER DEFAULT NULL,
+        fullhash INTEGER DEFAULT NULL
+        );
+    """
+
+
 
 
 #####################################
@@ -65,15 +80,15 @@ my_uid = pwd.getpwnam(me).pw_uid
 
 @trap
 def undeux_main(myargs:argparse.Namespace) -> int:
-
+    ###
+    # Let's get down to it. The first order of business is
+    # the scanning of the directories for information. The
+    # files are then grouped by size (files that differ in
+    # size are necessarily different files) and all the files
+    # that are unique in their sizes are eliminated before
+    # the new database table is built.
+    ###
     logger.info('scan begun')
-
-    threshold = myargs.progress
-    ############################################################
-    # Use the generator to collect the files so that we do not
-    # build a useless list in memory.
-    ############################################################
-
     data=collections.defaultdict(list)
 
     for dir in myargs.dirs:
@@ -88,10 +103,17 @@ def undeux_main(myargs:argparse.Namespace) -> int:
             data[int(info)].append(repr(info))
 
     logger.info('scan finished')
-
     logger.info(f"scanned {i} directory entries.")
     logger.info(f"{len(data)} distinct lengths.")
 
+    ###
+    # Unless the host where this program is being run is
+    # critically low in memory, the following is the
+    # fastest way to delete the keys that point to only
+    # one file.
+    #
+    # This program adds a few facts to the logfile.
+    ###
     data = {k:v for k, v in data.items() if len(v) != 1}
     logger.info(f"possible duplicates reduced to {len(data)} groups.")
     cases = largest_group = bigk = 0
@@ -101,6 +123,9 @@ def undeux_main(myargs:argparse.Namespace) -> int:
             largest_group = len(v)
             bigk = k
 
+    ###
+    # Maybe we got lucky? :-)
+    ###
     logger.info(f"{cases} files needing further checks.")
     if not cases: return os.EX_OK
 
@@ -139,7 +164,7 @@ if __name__ == "__main__":
         default=default_size,
         help=f"Only files larger than {default_size} are considered.")
 
-    parser.add_argument('dirs', nargs="*", 
+    parser.add_argument('dirs', nargs="*",
         default=[fileutils.expandall(os.getcwd())],
         help="directories to investigate (if not *this* directory)")
 
