@@ -34,6 +34,7 @@ import tomllib
 ###
 # From hpclib
 ###
+import freaddirect
 import linuxutils
 from   urdecorators import trap
 from   urlogger import URLogger

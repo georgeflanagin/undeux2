@@ -36,14 +36,16 @@ import pwd
 import resource
 import time
 import textwrap
+import xxhash
+hashfoo=xxhash.xxh128
+
 
 #####################################
 # From HPCLIB
 #####################################
 
 import fileclass
-import fileutils
-import fname
+import freaddirect
 from   linuxutils import dump_cmdline
 from   sqlitedb import SQLiteDB
 from   urdecorators import trap
@@ -118,6 +120,29 @@ def expandall(s:str) -> str:
     return s if s is None else os.path.realpath(os.path.abspath(os.path.expandvars(os.path.expanduser(s))))
 
 
+@trap
+def fingerprint(fname:str,
+    head_blocks:int=0,
+    tail_blocks:int=0) -> str:
+    """
+    This function hashes the data in the file.
+
+    fname -- a path name.
+    head_blocks -- number of blocks to read at the front of the file.
+        0 means read the whole file, and tail_blocks param is ignored.
+    tail_blocks -- number of blocks to read at the end of the file.
+
+    returns -- string of hex digits.
+    """
+    fd = freaddirect.fopendirect(fname)
+    if fd < 0:
+        raise Exception("Failed to get file descriptor.")
+
+    hasher=hashfoo()
+    h.update(freaddirect.fdirect_read(fd, headblocks))
+    h.update(freaddirect.fdirect_read(fd, -tailblocks))
+    return h.hexdigest()
+
 
 def is_hidden(path:str) -> bool:
     """
@@ -157,11 +182,19 @@ def undeux_main(myargs:argparse.Namespace) -> int:
 
         for i, f in enumerate(all_files_in(dir)):
             if not i % myargs.progress: print('.', end='', flush=True)
-            info=fileclass.FileClass(f)
+            try:
+                info=os.stat(f)
+            except:
+                unusable += 1
+                continue
 
-            if not info.usable: unusable += 1; continue
-            if info.inodedata.st_size < myargs.big_file: too_small += 1; continue
-            if info.links > 1: linked +=1; continue
+            if info.st_size < myargs.big_file:
+                too_small += 1
+                continue
+
+            if info.links > 1:
+                linked +=1
+                continue
 
             data[int(info)].append(repr(info))
 
@@ -221,15 +254,15 @@ def undeux_main(myargs:argparse.Namespace) -> int:
     logger.info("writing to the database")
     for k, v in data.items():
         for f in v:
-            info_f = fileclass.FileClass(f)
+            fd = freaddirect.fdirectopen(f)
             ###
             # These assignment statements allocate no space -- they
             # only provide clarity.
             ###
-            filename=str(info_f)
+            filename=os.path.basename(f)
             dirname=os.path.dirname(f)
             bucket=k
-            hash=info_f.fingerprint()
+            hash=fingerprint(f, 8)
             db.execute_SQL(insert, filename, dirname, bucket, hash, None)
 
 
@@ -263,7 +296,7 @@ if __name__ == "__main__":
         help=f"Only files larger than {default_size} are considered.")
 
     parser.add_argument('dirs', nargs="*",
-        default=[fileutils.expandall(os.getcwd())],
+        default=[expandall(os.getcwd())],
         help="directories to investigate (if not *this* directory)")
 
     parser.add_argument('--keep-hard-links', action='store_true',

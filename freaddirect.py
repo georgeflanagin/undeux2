@@ -21,6 +21,8 @@ import mmap
 import struct
 import tempfile
 
+from   urdecorators import trap
+
 ###
 # Credits
 ###
@@ -33,7 +35,9 @@ __email__ = 'gflanagin@richmond.edu'
 __status__ = 'in progress'
 __license__ = 'MIT'
 
+BLOCKSIZE=None
 
+@trap
 def get_logical_block_size(dir:str=None) -> int:
     """
     Given that any program may be using several different file
@@ -48,6 +52,7 @@ def get_logical_block_size(dir:str=None) -> int:
 
     returns -- the block size, expressed in bytes.
     """
+    global BLOCKSIZE
     BLKSSZGET = 0x1268
 
     path = dir if dir else os.getcwd()
@@ -55,21 +60,23 @@ def get_logical_block_size(dir:str=None) -> int:
     try:
         f=tempfile.TemporaryFile(dir=path)
         buf = fcntl.ioctl(f.fileno(), BLKSSZGET, b"    ")
-        return struct.unpack("I", buf)[0]
+        BLOCKSIZE = struct.unpack("I", buf)[0]
 
     except Exception:
         try:
             st = os.statvfs(path)
-            return st.f_bsize or os.sysconf("SC_PAGESIZE")
+            BLOCKSIZE = st.f_bsize or os.sysconf("SC_PAGESIZE")
 
         except Exception:
-            return os.sysconf("SC_PAGESIZE")
+            BLOCKSIZE = os.sysconf("SC_PAGESIZE")
 
     finally:
         f.close()
+        return BLOCKSIZE
 
 
-def fdirect_open(path:str) -> int:
+@trap
+def fdirect_open(path:str, direct:bool=True) -> int:
     """
     Low-level open on a filename.
     """
@@ -79,9 +86,11 @@ def fdirect_open(path:str) -> int:
         return os.open(path, flags)
 
     except:
+        raise
         return -1
 
 
+@trap
 def fdirect_read(fd:int, offset:int, size:int,
     direct:bool=True, bs:int=os.sysconf("SC_PAGESIZE")) -> bytes:
     """
@@ -92,14 +101,24 @@ def fdirect_read(fd:int, offset:int, size:int,
     offset -- where to read. positive numbers are construed to be
         offsets from the beginning, and negative numbers are
         construed to be from the end.
-    size -- how much to read.
+    size -- how much to read in blocks.
     direct -- whether to attempt to use a direct read. The failover
         is the usual buffered read. If you happen to "know" that
         you are reading on a file system that cannot be directly
         read (NFS, for example), pass in direct=False
 
-    Returns bytes of length 'size'.
+    Returns bytes of length 'size' blocks.
     """
+    global BLOCKSIZE
+
+    bs = BLOCKSIZE if BLOCKSIZE else get_logical_block_size()
+    size *= bs
+
+    # Coerce offset to be in the file.
+    if offset < 0:
+        offset = max(os.fstat(fd).st_size - offset*BLOCKSIZE, 0)
+    else:
+        offset = min(os.fstat(fd).st_size, offset*BLOCKSIZE)
 
     page = mmap.PAGESIZE  # typically 4096; helps ensure mmap alignment
 
@@ -107,6 +126,7 @@ def fdirect_read(fd:int, offset:int, size:int,
     align_off  = (offset // bs) * bs
     align_diff = offset - align_off
     read_size  = ((align_diff + size + bs - 1) // bs) * bs  # ceil to multiple of bs
+    flags=fcntl.fcntl(fd, fcntl.F_GETFL)
 
     try:
         # If we're in O_DIRECT, the buffer and size must be aligned to both block and page.
@@ -123,7 +143,10 @@ def fdirect_read(fd:int, offset:int, size:int,
                 mv = mv[:n]
             # Return requested slice
             out = bytes(mv[align_diff:align_diff + size])
-            buf.close()
+            try:
+                buf.close()
+            except:
+                pass
             return out
 
         def _buffered_pread():
@@ -146,12 +169,14 @@ def fdirect_read(fd:int, offset:int, size:int,
     finally:
         os.close(fd)
 
+
 # --- Example usage ---
 if __name__ == "__main__":
-    path = "/dev/sda"          # or a large regular file
+    path = "freaddirect.py"    # or a large regular file
     off  = 4096 * 1234         # try a misaligned value to see alignment logic work
     n    = 128 * 1024          # 128 KiB
-    data = aligned_read(path, off, n, direct=True)
-    print(f"Read {len(data)} bytes (requested {n})")
+    fd = fdirect_open(path)
+    data = fdirect_read(fd, off, n, direct=True)
+    print(f"Read {len(data)} bytes (requested {n}) {data=}")
 
 
