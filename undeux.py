@@ -229,7 +229,10 @@ def undeux_main(myargs:argparse.Namespace) -> int:
             filename=str(info_f)
             dirname=os.path.dirname(f)
             bucket=k
-            hash=info_f.fingerprint()
+            try:
+                hash=info_f.fingerprint()
+            except:
+                hash='0000'
             db.execute_SQL(insert, filename, dirname, bucket, hash, None)
 
 
