@@ -42,9 +42,6 @@ import textwrap
 #####################################
 
 import fileclass
-import fileutils
-import fname
-from   linuxutils import dump_cmdline
 from   sqlitedb import SQLiteDB
 from   urdecorators import trap
 from   urlogger import URLogger
@@ -202,7 +199,7 @@ def undeux_main(myargs:argparse.Namespace) -> int:
     # Get the database open, and create the empty table. We will create
     # the index AFTER the table is populated to speed the inserts.
     ###
-    db = SQLiteDB('undeux.db')
+    db = SQLiteDB('/localscratch/undeux.db')
     if not db:
         logging.error('Unable to open database.')
         return os.EX_DATAERR
@@ -266,7 +263,7 @@ if __name__ == "__main__":
         help=f"Only files larger than {default_size} are considered.")
 
     parser.add_argument('dirs', nargs="*",
-        default=[fileutils.expandall(os.getcwd())],
+        default=[expandall(os.getcwd())],
         help="directories to investigate (if not *this* directory)")
 
     parser.add_argument('--keep-hard-links', action='store_true',
@@ -303,7 +300,6 @@ if __name__ == "__main__":
     logger=URLogger(logfile=logfile, level=myargs.log_level)
     print(f"logging to {logfile} at level {myargs.log_level}")
 
-    dump_cmdline(myargs, split_it=True)
     os.nice(myargs.nice)
 
     try:

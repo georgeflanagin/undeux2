@@ -8,7 +8,7 @@ from   typing import *
 ###
 # Standard imports, starting with os and sys
 ###
-min_py = (3, 11)
+min_py = (3, 9)
 import os
 import sys
 if sys.version_info < min_py:
@@ -25,7 +25,6 @@ import getpass
 import io
 import logging
 import stat
-import tomllib
 
 ###
 # Installed libraries like numpy, pandas, paramiko
@@ -323,12 +322,6 @@ if __name__ == '__main__':
             pass
 
     logger = URLogger(logfile=logfile, level=myargs.loglevel)
-
-    try:
-        with open(configfile, 'rb') as f:
-            myargs.config=tomllib.load(f)
-    except FileNotFoundError as e:
-        myargs.config={}
 
     try:
         outfile = sys.stdout if not myargs.output else open(myargs.output, 'w')

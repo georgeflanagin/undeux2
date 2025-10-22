@@ -3,12 +3,12 @@
 #SBATCH --job-name=undeux
 #SBATCH --output=undeux.%j.out
 #SBATCH --ntasks=1
-#SBATCH --time=72:00:00
+#SBATCH --time=24:00:00
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=hpc@richmond.edu
-#SBATCH --mem=4GB
-#SBATCH --partition=erickson
-#SBATCH --cpus-per-task=3
+#SBATCH --mail-user=gflanagi@richmond.edu
+#SBATCH --mem=12GB
+#SBATCH --partition=bukach
+#SBATCH --cpus-per-task=4
 
 
 # Print the simulation start date/time
@@ -21,28 +21,16 @@ echo "SLURM_NODELIST=$SLURM_NODELIST"
 export PYTHON=/usr/local/sw/anaconda/anaconda3/bin/python
 export PYTHONPATH=/usr/local/sw/hpclib
 export SCRATCH=/localscratch/installer
-export DB=$SCRATCH/undeux.db
-export TARGET=/scratch/cparish/datarecovery
+export TARGET=/scratch/cparish
 export UNDEUXDIR=/usr/local/sw/undeux2
-
-# This is our home.
-cd "$UNDEUXDIR"
+export PYTHONPATH="$UNDEUXDIR:$PYTHONPATH"
 
 # Make sure we have a directory.
 mkdir -p "$SCRATCH"
-
-# Build the database
-# rm -f "$DB"
-# sqlite3 "$DB" < undeux.sql
-
-# Wait one second so that the program doesn't think
-# the database is newer than it is.
-sleep 1
-touch undeux.py
+cd "$SCRATCH"
 
 # Go for it.
-/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/tg9kt"
-/usr/bin/time "$PYTHON" undeux.py -y --db "$DB" --dir "$TARGET/zeta5"
+/usr/bin/time -v "$PYTHON" "$UNDEUXDIR/undeux.py" -z "$TARGET" 
 
 # Bring the file back
 dd if=$DB of=$HOME/undeux.db bs=1M
